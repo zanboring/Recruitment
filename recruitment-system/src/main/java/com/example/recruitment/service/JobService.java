@@ -26,8 +26,18 @@ public interface JobService {
 
     List<JobStatVO> statBySkill();
 
+    List<JobStatVO> statBySalaryRange();
+
+    List<JobStatVO> statByEducation();
+
+    List<JobStatVO> statByExperience();
+
+    List<JobStatVO> statByStatus();
+
     BigDecimal predictSalary(String city, String experience, String education, String skills);
 
     List<Job> recommendJobs(String skills, String city);
+
+    String buildAnalysisSummary();
 }
 

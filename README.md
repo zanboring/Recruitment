@@ -4,7 +4,7 @@
 
 ### 技术栈
 
-- 后端：Spring Boot 3.2.5、MyBatis、PageHelper、MySQL 8.0、WebMagic、EasyExcel
+- 后端：Spring Boot 3.2.5、MyBatis、PageHelper、MySQL 8.0、Jsoup、EasyExcel
 - 前端：Vue3、Vite、Vue Router、Pinia、Axios、Element Plus、ECharts
 - JDK：JDK 21
 - 构建工具：Maven 3.9.9
@@ -44,4 +44,14 @@ cd recruitment-system-frontend
 npm install
 npm run dev
 ```
+
+### 功能页面
+
+- 登录/注册：`/login`
+- 首页概览：`/`
+- 数据可视化：`/dashboard`
+- 岗位列表（搜索/筛选）：`/jobs`
+- 数据对比（新增/下架/在岗）：`/compare`
+- 数据分析（文字+图表）：`/analysis`
+- 爬虫任务：`/settings`
 

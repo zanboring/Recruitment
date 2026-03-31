@@ -70,6 +70,26 @@ public class JobController {
         return Result.success(jobService.statBySkill());
     }
 
+    @GetMapping("/stat/salary-range")
+    public Result<List<JobStatVO>> statBySalaryRange() {
+        return Result.success(jobService.statBySalaryRange());
+    }
+
+    @GetMapping("/stat/education")
+    public Result<List<JobStatVO>> statByEducation() {
+        return Result.success(jobService.statByEducation());
+    }
+
+    @GetMapping("/stat/experience")
+    public Result<List<JobStatVO>> statByExperience() {
+        return Result.success(jobService.statByExperience());
+    }
+
+    @GetMapping("/stat/status")
+    public Result<List<JobStatVO>> statByStatus() {
+        return Result.success(jobService.statByStatus());
+    }
+
     @GetMapping("/predict-salary")
     public Result<BigDecimal> predictSalary(@RequestParam(required = false) String city,
                                             @RequestParam(required = false) String experience,
@@ -82,6 +102,11 @@ public class JobController {
     public Result<List<Job>> recommend(@RequestParam(required = false) String skills,
                                        @RequestParam(required = false) String city) {
         return Result.success(jobService.recommendJobs(skills, city));
+    }
+
+    @GetMapping("/analysis/summary")
+    public Result<String> analysisSummary() {
+        return Result.success(jobService.buildAnalysisSummary());
     }
 }
 

@@ -28,11 +28,26 @@ public interface JobMapper {
 
     List<JobStatVO> statBySkill();
 
+    List<JobStatVO> statBySalaryRange();
+
+    List<JobStatVO> statByEducation();
+
+    List<JobStatVO> statByExperience();
+
+    List<JobStatVO> statByStatus();
+
     BigDecimal predictSalary(@Param("city") String city,
                              @Param("experience") String experience,
                              @Param("education") String education,
                              @Param("skills") String skills);
 
     List<Job> selectForExport(@Param("limit") Integer limit);
+
+    Job selectByJobKey(@Param("jobKey") String jobKey);
+
+    int markOfflineByAbsentKeys(@Param("sourceSite") String sourceSite,
+                                @Param("keys") List<String> keys);
+
+    int markOfflineWhenNoKeys(@Param("sourceSite") String sourceSite);
 }
 

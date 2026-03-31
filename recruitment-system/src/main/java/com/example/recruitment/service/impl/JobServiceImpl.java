@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -71,6 +72,26 @@ public class JobServiceImpl implements JobService {
     }
 
     @Override
+    public List<JobStatVO> statBySalaryRange() {
+        return jobMapper.statBySalaryRange();
+    }
+
+    @Override
+    public List<JobStatVO> statByEducation() {
+        return jobMapper.statByEducation();
+    }
+
+    @Override
+    public List<JobStatVO> statByExperience() {
+        return jobMapper.statByExperience();
+    }
+
+    @Override
+    public List<JobStatVO> statByStatus() {
+        return jobMapper.statByStatus();
+    }
+
+    @Override
     public BigDecimal predictSalary(String city, String experience, String education, String skills) {
         BigDecimal avg = jobMapper.predictSalary(city, experience, education, skills);
         if (avg == null) {
@@ -96,6 +117,29 @@ public class JobServiceImpl implements JobService {
                 .sorted(Comparator.comparingInt(j -> -matchScore((Job) j, wanted)))
                 .limit(10)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public String buildAnalysisSummary() {
+        List<JobStatVO> cityStats = statByCity();
+        List<JobStatVO> skillStats = statBySkill();
+        List<JobStatVO> salaryStats = statBySalaryRange();
+
+        JobStatVO topCity = cityStats.isEmpty() ? null : cityStats.get(0);
+        JobStatVO topSkill = skillStats.isEmpty() ? null : skillStats.get(0);
+        BigDecimal avg = predictSalary(null, null, null, null);
+        JobStatVO topBand = salaryStats.stream()
+                .filter(Objects::nonNull)
+                .max(Comparator.comparingLong(v -> v.getCount() == null ? 0L : v.getCount()))
+                .orElse(null);
+
+        return String.format(
+                "当前岗位需求较集中的城市为%s；热门技能以%s为代表；平均薪资约为%s元。薪资分布以%s区间为主，整体呈现技术岗位需求持续稳定的趋势。",
+                topCity == null ? "暂无数据" : topCity.getName(),
+                topSkill == null ? "暂无数据" : topSkill.getName(),
+                avg == null ? "0.00" : avg.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString(),
+                topBand == null ? "暂无数据" : topBand.getName()
+        );
     }
 
     private int matchScore(Job job, String[] wanted) {

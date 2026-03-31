@@ -32,6 +32,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/DataManage.vue')
       },
       {
+        path: 'compare',
+        name: 'DataCompare',
+        component: () => import('@/views/DataCompare.vue')
+      },
+      {
+        path: 'analysis',
+        name: 'Analysis',
+        component: () => import('@/views/Analysis.vue')
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/Settings.vue')

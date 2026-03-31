@@ -8,6 +8,10 @@
         <id column="id" property="id"/>
         <result column="company_id" property="companyId"/>
         <result column="title" property="title"/>
+        <result column="company_name" property="companyName"/>
+        <result column="source_site" property="sourceSite"/>
+        <result column="job_key" property="jobKey"/>
+        <result column="job_status" property="jobStatus"/>
         <result column="city" property="city"/>
         <result column="experience" property="experience"/>
         <result column="education" property="education"/>
@@ -17,16 +21,17 @@
         <result column="skills" property="skills"/>
         <result column="job_desc" property="jobDesc"/>
         <result column="publish_time" property="publishTime"/>
+        <result column="last_seen_at" property="lastSeenAt"/>
         <result column="created_at" property="createdAt"/>
     </resultMap>
 
     <insert id="insert" parameterType="com.example.recruitment.entity.Job" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO job
-        (company_id, title, city, experience, education, min_salary, max_salary, salary_unit, skills, job_desc, publish_time, created_at)
+        (company_id, title, company_name, source_site, job_key, job_status, city, experience, education,
+         min_salary, max_salary, salary_unit, skills, job_desc, publish_time, last_seen_at, created_at)
         VALUES
-        (#{companyId}, #{title}, #{city}, #{experience}, #{education},
-         #{minSalary}, #{maxSalary}, #{salaryUnit}, #{skills}, #{jobDesc},
-         #{publishTime}, #{createdAt})
+        (#{companyId}, #{title}, #{companyName}, #{sourceSite}, #{jobKey}, #{jobStatus}, #{city}, #{experience}, #{education},
+         #{minSalary}, #{maxSalary}, #{salaryUnit}, #{skills}, #{jobDesc}, #{publishTime}, #{lastSeenAt}, #{createdAt})
     </insert>
 
     <update id="update" parameterType="com.example.recruitment.entity.Job">
@@ -34,6 +39,10 @@
         <set>
             <if test="companyId != null">company_id = #{companyId},</if>
             <if test="title != null">title = #{title},</if>
+            <if test="companyName != null">company_name = #{companyName},</if>
+            <if test="sourceSite != null">source_site = #{sourceSite},</if>
+            <if test="jobKey != null">job_key = #{jobKey},</if>
+            <if test="jobStatus != null">job_status = #{jobStatus},</if>
             <if test="city != null">city = #{city},</if>
             <if test="experience != null">experience = #{experience},</if>
             <if test="education != null">education = #{education},</if>
@@ -43,6 +52,7 @@
             <if test="skills != null">skills = #{skills},</if>
             <if test="jobDesc != null">job_desc = #{jobDesc},</if>
             <if test="publishTime != null">publish_time = #{publishTime},</if>
+            <if test="lastSeenAt != null">last_seen_at = #{lastSeenAt},</if>
         </set>
         WHERE id = #{id}
     </update>
@@ -58,10 +68,10 @@
     <select id="selectByCondition" parameterType="com.example.recruitment.dto.JobQueryDTO" resultMap="JobResultMap">
         SELECT j.*
         FROM job j
-        LEFT JOIN company c ON j.company_id = c.id
         <where>
             <if test="keyword != null and keyword != ''">
                 AND (j.title LIKE CONCAT('%', #{keyword}, '%')
+                  OR j.company_name LIKE CONCAT('%', #{keyword}, '%')
                   OR j.skills LIKE CONCAT('%', #{keyword}, '%')
                   OR j.job_desc LIKE CONCAT('%', #{keyword}, '%'))
             </if>
@@ -69,7 +79,7 @@
                 AND j.city = #{city}
             </if>
             <if test="companyName != null and companyName != ''">
-                AND c.name LIKE CONCAT('%', #{companyName}, '%')
+                AND j.company_name LIKE CONCAT('%', #{companyName}, '%')
             </if>
             <if test="experience != null and experience != ''">
                 AND j.experience = #{experience}
@@ -77,45 +87,79 @@
             <if test="education != null and education != ''">
                 AND j.education = #{education}
             </if>
+            <if test="status != null and status != ''">
+                AND j.job_status = #{status}
+            </if>
         </where>
         ORDER BY j.publish_time DESC
     </select>
 
     <select id="statByCity" resultType="com.example.recruitment.vo.JobStatVO">
-        SELECT city AS name,
-               COUNT(*) AS count,
-               AVG((min_salary + max_salary) / 2) AS avgSalary
+        SELECT city AS name, COUNT(*) AS count, AVG((min_salary + max_salary) / 2) AS avgSalary
         FROM job
+        WHERE job_status != 'OFFLINE'
         GROUP BY city
         ORDER BY count DESC
     </select>
 
     <select id="statByCompany" resultType="com.example.recruitment.vo.JobStatVO">
-        SELECT c.name AS name,
-               COUNT(*) AS count,
-               AVG((j.min_salary + j.max_salary) / 2) AS avgSalary
-        FROM job j
-        LEFT JOIN company c ON j.company_id = c.id
-        GROUP BY c.name
+        SELECT company_name AS name, COUNT(*) AS count, AVG((min_salary + max_salary) / 2) AS avgSalary
+        FROM job
+        WHERE job_status != 'OFFLINE'
+        GROUP BY company_name
         ORDER BY count DESC
     </select>
 
     <select id="statBySkill" resultType="com.example.recruitment.vo.JobStatVO">
-        SELECT skill AS name,
-               COUNT(*) AS count,
-               AVG(salary) AS avgSalary
+        SELECT skill AS name, COUNT(*) AS count, AVG(salary) AS avgSalary
         FROM (
-                 SELECT
-                     TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(j.skills, ',', numbers.n), ',', -1)) AS skill,
-                     (j.min_salary + j.max_salary) / 2 AS salary
+                 SELECT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(j.skills, ',', numbers.n), ',', -1)) AS skill,
+                        (j.min_salary + j.max_salary) / 2 AS salary
                  FROM job j
-                          JOIN (
-                     SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
-                 ) numbers
-                 ON CHAR_LENGTH(j.skills) - CHAR_LENGTH(REPLACE(j.skills, ',', '')) >= numbers.n - 1
+                          JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) numbers
+                               ON CHAR_LENGTH(j.skills) - CHAR_LENGTH(REPLACE(j.skills, ',', '')) >= numbers.n - 1
+                 WHERE j.job_status != 'OFFLINE'
              ) t
         WHERE skill != ''
         GROUP BY skill
+        ORDER BY count DESC
+    </select>
+
+    <select id="statBySalaryRange" resultType="com.example.recruitment.vo.JobStatVO">
+        SELECT CASE
+                   WHEN (min_salary + max_salary) / 2 <![CDATA[<]]> 8000 THEN '8k以下'
+                   WHEN (min_salary + max_salary) / 2 <![CDATA[<]]> 15000 THEN '8k-15k'
+                   WHEN (min_salary + max_salary) / 2 <![CDATA[<]]> 25000 THEN '15k-25k'
+                   ELSE '25k以上'
+               END AS name,
+               COUNT(*) AS count,
+               AVG((min_salary + max_salary) / 2) AS avgSalary
+        FROM job
+        WHERE job_status != 'OFFLINE'
+        GROUP BY name
+        ORDER BY avgSalary
+    </select>
+
+    <select id="statByEducation" resultType="com.example.recruitment.vo.JobStatVO">
+        SELECT education AS name, COUNT(*) AS count, AVG((min_salary + max_salary) / 2) AS avgSalary
+        FROM job
+        WHERE job_status != 'OFFLINE'
+        GROUP BY education
+        ORDER BY count DESC
+    </select>
+
+    <select id="statByExperience" resultType="com.example.recruitment.vo.JobStatVO">
+        SELECT experience AS name, COUNT(*) AS count, AVG((min_salary + max_salary) / 2) AS avgSalary
+        FROM job
+        WHERE job_status != 'OFFLINE'
+        GROUP BY experience
+        ORDER BY count DESC
+    </select>
+
+    <select id="statByStatus" resultType="com.example.recruitment.vo.JobStatVO">
+        SELECT job_status AS name, COUNT(*) AS count, AVG((min_salary + max_salary) / 2) AS avgSalary
+        FROM job
+        GROUP BY job_status
         ORDER BY count DESC
     </select>
 
@@ -123,6 +167,7 @@
         SELECT AVG((min_salary + max_salary) / 2) AS avgSalary
         FROM job
         <where>
+            job_status != 'OFFLINE'
             <if test="city != null and city != ''">
                 AND city = #{city}
             </if>
@@ -139,13 +184,32 @@
     </select>
 
     <select id="selectForExport" parameterType="int" resultMap="JobResultMap">
-        SELECT *
-        FROM job
-        ORDER BY publish_time DESC
+        SELECT * FROM job ORDER BY publish_time DESC
         <if test="limit != null">
             LIMIT #{limit}
         </if>
     </select>
 
+    <select id="selectByJobKey" parameterType="string" resultMap="JobResultMap">
+        SELECT * FROM job WHERE job_key = #{jobKey} LIMIT 1
+    </select>
+
+    <update id="markOfflineByAbsentKeys">
+        UPDATE job
+        SET job_status = 'OFFLINE'
+        WHERE source_site = #{sourceSite}
+          AND job_status != 'OFFLINE'
+          AND job_key NOT IN
+        <foreach collection="keys" item="k" open="(" separator="," close=")">
+            #{k}
+        </foreach>
+    </update>
+
+    <update id="markOfflineWhenNoKeys">
+        UPDATE job
+        SET job_status = 'OFFLINE'
+        WHERE source_site = #{sourceSite}
+          AND job_status != 'OFFLINE'
+    </update>
 </mapper>
 

@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/crawl")
@@ -27,6 +30,11 @@ public class CrawlController {
     public Result<Void> start(@PathVariable("id") Long id) {
         crawlService.startTask(id);
         return Result.success();
+    }
+
+    @GetMapping("/tasks")
+    public Result<List<CrawlTask>> listTasks() {
+        return Result.success(crawlService.listTasks());
     }
 }
 

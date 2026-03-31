@@ -3,48 +3,23 @@
     <el-row :gutter="16">
       <el-col :span="12">
         <el-card>
-          <div class="title">岗位城市分布</div>
+          <div class="title">各城市岗位数量</div>
           <div ref="cityChartRef" class="chart" />
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card>
-          <div class="title">企业岗位数量</div>
-          <div ref="companyChartRef" class="chart" />
+          <div class="title">薪资区间分布</div>
+          <div ref="salaryChartRef" class="chart" />
         </el-card>
       </el-col>
     </el-row>
 
     <el-row :gutter="16" style="margin-top: 16px">
-      <el-col :span="12">
+      <el-col :span="24">
         <el-card>
-          <div class="title">技能需求统计</div>
-          <div ref="skillChartRef" class="chart" />
-        </el-card>
-      </el-col>
-      <el-col :span="12">
-        <el-card>
-          <div class="title">薪资预测（示例）</div>
-          <el-form :model="form" label-width="70px" :inline="true">
-            <el-form-item label="城市">
-              <el-input v-model="form.city" placeholder="如：北京" style="width: 140px" />
-            </el-form-item>
-            <el-form-item label="经验">
-              <el-input v-model="form.experience" placeholder="如：1-3年" style="width: 140px" />
-            </el-form-item>
-            <el-form-item label="学历">
-              <el-input v-model="form.education" placeholder="如：本科" style="width: 140px" />
-            </el-form-item>
-            <el-form-item label="技能">
-              <el-input v-model="form.skills" placeholder="如：Java,Spring" style="width: 180px" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="onPredict">预测</el-button>
-            </el-form-item>
-          </el-form>
-          <div class="predict-result">
-            预测薪资：<span class="amount">{{ salaryText }}</span>
-          </div>
+          <div class="title">学历 / 经验要求统计</div>
+          <div ref="requirementChartRef" class="chart chart-lg" />
         </el-card>
       </el-col>
     </el-row>
@@ -52,84 +27,81 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import * as echarts from 'echarts';
-import { fetchJobStatCity, fetchJobStatCompany, fetchJobStatSkill, predictSalary } from '@/api/job';
+import {
+  fetchJobStatCity,
+  fetchJobStatSalaryRange,
+  fetchJobStatEducation,
+  fetchJobStatExperience
+} from '@/api/job';
 
 const cityChartRef = ref<HTMLDivElement | null>(null);
-const companyChartRef = ref<HTMLDivElement | null>(null);
-const skillChartRef = ref<HTMLDivElement | null>(null);
-
-const form = reactive({
-  city: '',
-  experience: '',
-  education: '',
-  skills: ''
-});
-
-const salaryText = ref<string>('—');
+const salaryChartRef = ref<HTMLDivElement | null>(null);
+const requirementChartRef = ref<HTMLDivElement | null>(null);
 
 const init = async () => {
-  const [cityData, companyData, skillData] = await Promise.all([
+  const [cityData, salaryRangeData, eduData, expData] = await Promise.all([
     fetchJobStatCity(),
-    fetchJobStatCompany(),
-    fetchJobStatSkill()
+    fetchJobStatSalaryRange(),
+    fetchJobStatEducation(),
+    fetchJobStatExperience()
   ]);
 
   if (cityChartRef.value) {
     const chart = echarts.init(cityChartRef.value);
     chart.setOption({
-      tooltip: {},
-      xAxis: { type: 'category', data: cityData.map((i: any) => i.name) },
-      yAxis: { type: 'value' },
-      series: [{ type: 'bar', data: cityData.map((i: any) => i.count) }]
-    });
-  }
-
-  if (companyChartRef.value) {
-    const chart = echarts.init(companyChartRef.value);
-    chart.setOption({
-      tooltip: {},
-      legend: { data: ['岗位数量'] },
-      xAxis: { type: 'category', data: companyData.map((i: any) => i.name).slice(0, 10) },
-      yAxis: { type: 'value' },
+      tooltip: { trigger: 'item' },
       series: [
         {
-          name: '岗位数量',
-          type: 'bar',
-          data: companyData.map((i: any) => i.count).slice(0, 10)
+          type: 'pie',
+          radius: ['35%', '68%'],
+          data: cityData.map((i: any) => ({ name: i.name || '未知', value: i.count || 0 }))
         }
       ]
     });
   }
 
-  if (skillChartRef.value) {
-    const chart = echarts.init(skillChartRef.value);
+  if (salaryChartRef.value) {
+    const chart = echarts.init(salaryChartRef.value);
     chart.setOption({
       tooltip: {},
-      xAxis: { type: 'category', data: skillData.map((i: any) => i.name).slice(0, 12) },
+      xAxis: { type: 'category', data: salaryRangeData.map((i: any) => i.name || '未知') },
       yAxis: { type: 'value' },
-      series: [{ type: 'bar', data: skillData.map((i: any) => i.count).slice(0, 12) }]
+      series: [{ type: 'bar', data: salaryRangeData.map((i: any) => i.count || 0), barMaxWidth: 48 }]
+    });
+  }
+
+  if (requirementChartRef.value) {
+    const chart = echarts.init(requirementChartRef.value);
+    chart.setOption({
+      tooltip: {},
+      legend: { data: ['学历要求', '经验要求'] },
+      xAxis: { type: 'category', data: buildAxis(eduData, expData) },
+      yAxis: { type: 'value' },
+      series: [
+        { name: '学历要求', type: 'bar', data: toSeries(buildAxis(eduData, expData), eduData) },
+        { name: '经验要求', type: 'bar', data: toSeries(buildAxis(eduData, expData), expData) }
+      ]
     });
   }
 };
 
-const onPredict = async () => {
-  const result = await predictSalary({
-    city: form.city || undefined,
-    experience: form.experience || undefined,
-    education: form.education || undefined,
-    skills: form.skills || undefined
-  });
-  const val = result == null ? 0 : Number(result);
-  salaryText.value = `${val.toFixed(2)} 元`;
+const buildAxis = (a: any[], b: any[]) => {
+  const set = new Set<string>();
+  a.forEach((i: any) => set.add(i.name || '未知'));
+  b.forEach((i: any) => set.add(i.name || '未知'));
+  return Array.from(set);
+};
+
+const toSeries = (axis: string[], source: any[]) => {
+  const map = new Map<string, number>();
+  source.forEach((i: any) => map.set(i.name || '未知', i.count || 0));
+  return axis.map((key) => map.get(key) || 0);
 };
 
 onMounted(() => {
-  init().catch(() => {
-    // 页面不因可视化接口失败中断
-    salaryText.value = '—';
-  });
+  init().catch(() => undefined);
 });
 </script>
 
@@ -144,13 +116,8 @@ onMounted(() => {
 .chart {
   height: 320px;
 }
-.predict-result {
-  margin-top: 16px;
-  font-size: 16px;
-}
-.amount {
-  color: #409eff;
-  font-weight: 700;
+.chart-lg {
+  height: 360px;
 }
 </style>
 

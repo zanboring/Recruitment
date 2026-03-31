@@ -7,17 +7,29 @@ import com.example.recruitment.mapper.CrawlTaskMapper;
 import com.example.recruitment.mapper.JobMapper;
 import com.example.recruitment.service.CrawlService;
 import lombok.RequiredArgsConstructor;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import us.codecraft.webmagic.Page;
-import us.codecraft.webmagic.Site;
-import us.codecraft.webmagic.Spider;
-import us.codecraft.webmagic.processor.PageProcessor;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +37,13 @@ public class CrawlServiceImpl implements CrawlService {
 
     private final CrawlTaskMapper crawlTaskMapper;
     private final JobMapper jobMapper;
+    private final ExecutorService crawlExecutor = Executors.newFixedThreadPool(2);
+
+    private static final List<String> DEFAULT_KEYWORDS = Arrays.asList("Java", "Python", "前端", "测试", "网络工程", "大数据");
+    private static final List<String> DEFAULT_SITES = Arrays.asList("zhaopin", "51job", "boss");
+    private static final Pattern SALARY_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*[kK千]?\\s*[-~到]\\s*(\\d+(?:\\.\\d+)?)\\s*[kK千]?");
+    private static final Pattern EDUCATION_PATTERN = Pattern.compile("(大专|本科|硕士|博士|中专|高中|不限)");
+    private static final Pattern EXPERIENCE_PATTERN = Pattern.compile("(应届|\\d+[-至]\\d+年|\\d+年|经验不限)");
 
     @Override
     @Transactional
@@ -49,125 +68,262 @@ public class CrawlServiceImpl implements CrawlService {
         task.setStatus("RUNNING");
         crawlTaskMapper.update(task);
 
-        // 独立线程执行爬虫，避免阻塞接口响应
-        new Thread(() -> runSpider(taskId)).start();
+        crawlExecutor.submit(() -> runCrawl(taskId));
     }
 
-    private void runSpider(Long taskId) {
+    @Override
+    public List<CrawlTask> listTasks() {
+        return crawlTaskMapper.selectAll();
+    }
+
+    private void runCrawl(Long taskId) {
         CrawlTask task = crawlTaskMapper.selectById(taskId);
         if (task == null) {
             return;
         }
-
-        List<Job> collected = new ArrayList<>();
-        try {
-            Spider.create(new SimpleJobProcessor(task, collected))
-                    .addUrl(buildStartUrl(task))
-                    .thread(3)
-                    .run();
-        } catch (Exception e) {
-            // 爬虫失败不直接结束，仍可写入示例数据用于演示
-            task.setMessage("爬虫执行失败：" + e.getMessage());
-        }
-
-        // 如果没有抓到数据，写入少量示例数据保证可视化能跑通
-        if (collected.isEmpty()) {
-            collected = fallbackSampleJobs(task);
-        }
-
+        List<String> sites = parseSites(task.getSourceSite());
+        List<String> keywords = parseKeywords(task.getKeyword());
         int inserted = 0;
-        for (Job j : collected) {
-            try {
-                j.setCompanyId(j.getCompanyId());
-                j.setCreatedAt(LocalDateTime.now());
-                jobMapper.insert(j);
-                inserted++;
-            } catch (Exception ignore) {
-                // 单条插入失败不影响整体
+        int updated = 0;
+        int offline = 0;
+        StringBuilder errors = new StringBuilder();
+
+        try {
+            for (String site : sites) {
+                Set<String> seenKeys = new HashSet<>();
+                for (String keyword : keywords) {
+                    List<Job> crawled = crawlBySite(site, keyword, task.getCity());
+                    for (Job job : crawled) {
+                        seenKeys.add(job.getJobKey());
+                        Job existed = jobMapper.selectByJobKey(job.getJobKey());
+                        if (existed == null) {
+                            job.setJobStatus("NEW");
+                            job.setCreatedAt(LocalDateTime.now());
+                            jobMapper.insert(job);
+                            inserted++;
+                        } else {
+                            existed.setTitle(job.getTitle());
+                            existed.setCompanyName(job.getCompanyName());
+                            existed.setCity(job.getCity());
+                            existed.setEducation(job.getEducation());
+                            existed.setExperience(job.getExperience());
+                            existed.setMinSalary(job.getMinSalary());
+                            existed.setMaxSalary(job.getMaxSalary());
+                            existed.setSkills(job.getSkills());
+                            existed.setJobDesc(job.getJobDesc());
+                            existed.setPublishTime(job.getPublishTime());
+                            existed.setSalaryUnit("monthly");
+                            existed.setJobStatus("ACTIVE");
+                            existed.setLastSeenAt(LocalDateTime.now());
+                            jobMapper.update(existed);
+                            updated++;
+                        }
+                    }
+                }
+                offline += seenKeys.isEmpty()
+                        ? jobMapper.markOfflineWhenNoKeys(site)
+                        : jobMapper.markOfflineByAbsentKeys(site, new ArrayList<>(seenKeys));
             }
+        } catch (Exception e) {
+            errors.append(e.getMessage());
         }
 
-        task.setJobCount(inserted);
+        task.setJobCount(inserted + updated);
         task.setStatus("FINISHED");
         task.setFinishedAt(LocalDateTime.now());
-        if (task.getMessage() == null) {
-            task.setMessage("任务完成");
-        }
+        task.setMessage(String.format("完成：新增%d，更新%d，下架%d%s",
+                inserted, updated, offline, errors.isEmpty() ? "" : "；异常：" + errors));
         crawlTaskMapper.update(task);
     }
 
-    private String buildStartUrl(CrawlTask task) {
-        // 示例：实际项目中应替换为真实招聘站点搜索页
-        String keyword = task.getKeyword() == null ? "" : task.getKeyword().trim();
-        return "https://example.com/search?keyword=" + keyword;
+    private List<String> parseSites(String sourceSite) {
+        if (sourceSite == null || sourceSite.trim().isEmpty() || "all".equalsIgnoreCase(sourceSite)) {
+            return DEFAULT_SITES;
+        }
+        List<String> sites = new ArrayList<>();
+        for (String p : sourceSite.split(",")) {
+            String s = p.trim().toLowerCase();
+            if (DEFAULT_SITES.contains(s)) {
+                sites.add(s);
+            }
+        }
+        return sites.isEmpty() ? DEFAULT_SITES : sites;
     }
 
-    private List<Job> fallbackSampleJobs(CrawlTask task) {
+    private List<String> parseKeywords(String keywordText) {
+        if (keywordText == null || keywordText.trim().isEmpty()) {
+            return DEFAULT_KEYWORDS;
+        }
+        List<String> keywords = new ArrayList<>();
+        for (String p : keywordText.split("[,，]")) {
+            String v = p.trim();
+            if (!v.isEmpty()) {
+                keywords.add(v);
+            }
+        }
+        return keywords.isEmpty() ? DEFAULT_KEYWORDS : keywords;
+    }
+
+    private List<Job> crawlBySite(String site, String keyword, String city) {
+        String url = buildSearchUrl(site, keyword, city);
         List<Job> jobs = new ArrayList<>();
-        String city = Objects.toString(task.getCity(), "未知");
-        String keyword = Objects.toString(task.getKeyword(), "工程师");
-        for (int i = 1; i <= 12; i++) {
-            Job j = new Job();
-            j.setTitle(keyword + "（示例" + i + "）");
-            j.setCity(city);
-            j.setExperience("1-3年");
-            j.setEducation("本科");
-            j.setMinSalary(new java.math.BigDecimal(15000 + i * 100));
-            j.setMaxSalary(new java.math.BigDecimal(25000 + i * 120));
-            j.setSalaryUnit("monthly");
-            j.setSkills("Java,Spring,MySQL");
-            j.setJobDesc("示例数据用于可视化演示。");
-            j.setPublishTime(LocalDateTime.now().minusDays(i));
-            jobs.add(j);
+        try {
+            Document doc = Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36")
+                    .timeout(10000)
+                    .get();
+            Elements cards = doc.select("div,li,article");
+            for (Element card : cards) {
+                Job job = parseCard(site, card, city);
+                if (job != null && job.getTitle() != null && !job.getTitle().isBlank()) {
+                    jobs.add(job);
+                    if (jobs.size() >= 80) {
+                        break;
+                    }
+                }
+            }
+        } catch (Exception ignore) {
+            // 单站点失败时不抛出，继续执行其他站点
         }
         return jobs;
     }
 
-    static class SimpleJobProcessor implements PageProcessor {
-
-        private final CrawlTask task;
-        private final List<Job> collected;
-        private final Site site = Site.me()
-                .setRetryTimes(2)
-                .setSleepTime(500)
-                .setTimeOut(8000);
-
-        SimpleJobProcessor(CrawlTask task, List<Job> collected) {
-            this.task = task;
-            this.collected = collected;
+    private String buildSearchUrl(String site, String keyword, String city) {
+        String kw = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
+        String c = city == null ? "" : URLEncoder.encode(city, StandardCharsets.UTF_8);
+        if ("zhaopin".equals(site)) {
+            return "https://sou.zhaopin.com/?kw=" + kw + "&jl=" + c;
         }
+        if ("51job".equals(site)) {
+            return "https://we.51job.com/pc/search?keyword=" + kw + "&jobarea=" + c;
+        }
+        return "https://www.zhipin.com/web/geek/job?query=" + kw;
+    }
 
-        @Override
-        public void process(Page page) {
-            // 说明：此处为通用 xpath 示例。真实项目需根据具体招聘站点 HTML 结构调整。
-            List<String> titles = page.getHtml().xpath("//a[contains(@href,'job')]/text()").all();
-            String city = task.getCity() == null ? "未知" : task.getCity();
-            String keyword = task.getKeyword() == null ? "" : task.getKeyword();
+    private Job parseCard(String sourceSite, Element card, String cityHint) {
+        String text = card.text();
+        if (text == null || text.length() < 20) {
+            return null;
+        }
+        if (!(text.contains("Java") || text.contains("Python") || text.contains("前端") || text.contains("测试")
+                || text.contains("网络") || text.contains("大数据"))) {
+            return null;
+        }
+        String title = firstText(card, ".job-name,.title,a");
+        if (title.isBlank() || title.length() > 80) {
+            title = safePart(text, 0, 20);
+        }
+        String company = firstText(card, ".company-name,.company,a[ka*=company]");
+        if (company.isBlank()) {
+            company = "未知公司";
+        }
+        String salaryText = firstText(card, ".salary,.job-salary,.red");
+        BigDecimal[] salary = parseSalaryRange(salaryText.isBlank() ? text : salaryText);
 
-            int limit = Math.min(20, titles.size());
-            for (int i = 0; i < limit; i++) {
-                String t = titles.get(i);
-                if (t == null || t.trim().isEmpty()) continue;
-                Job j = new Job();
-                j.setTitle(t.trim());
-                j.setCity(city);
-                j.setExperience("1-3年");
-                j.setEducation("本科");
-                j.setMinSalary(new java.math.BigDecimal(18000 + i * 100));
-                j.setMaxSalary(new java.math.BigDecimal(28000 + i * 120));
-                j.setSalaryUnit("monthly");
-                // 通用技能示例
-                j.setSkills(keyword.isEmpty() ? "Java,Spring" : "Java,Spring," + keyword);
-                j.setJobDesc("爬取示例数据。");
-                j.setPublishTime(LocalDateTime.now().minusDays(i));
-                collected.add(j);
+        String city = firstMatch(text, "(北京|上海|广州|深圳|杭州|南京|武汉|成都|西安|苏州|长沙|重庆)");
+        if (city == null || city.isBlank()) {
+            city = cityHint == null || cityHint.isBlank() ? "未知" : cityHint;
+        }
+        String edu = firstMatchedOrDefault(text, EDUCATION_PATTERN, "不限");
+        String exp = firstMatchedOrDefault(text, EXPERIENCE_PATTERN, "经验不限");
+        String publish = firstMatch(text, "(\\d{1,2}-\\d{1,2}|\\d+小时前|\\d+天前|今天|昨日)");
+
+        Job job = new Job();
+        job.setTitle(trimLen(title, 100));
+        job.setCompanyName(trimLen(company, 120));
+        job.setSourceSite(sourceSite);
+        job.setCity(city);
+        job.setEducation(edu);
+        job.setExperience(exp);
+        job.setMinSalary(salary[0]);
+        job.setMaxSalary(salary[1]);
+        job.setSalaryUnit("monthly");
+        job.setSkills(extractSkills(text));
+        job.setJobDesc(trimLen(text, 1500));
+        job.setPublishTime(parsePublishTime(publish));
+        job.setLastSeenAt(LocalDateTime.now());
+        job.setJobKey(buildJobKey(sourceSite, job.getTitle(), job.getCompanyName(), job.getCity()));
+        return job;
+    }
+
+    private String firstText(Element card, String css) {
+        Element e = card.selectFirst(css);
+        return e == null ? "" : e.text().trim();
+    }
+
+    private BigDecimal[] parseSalaryRange(String raw) {
+        Matcher m = SALARY_PATTERN.matcher(raw);
+        if (m.find()) {
+            BigDecimal min = parseSalaryToYuan(m.group(1));
+            BigDecimal max = parseSalaryToYuan(m.group(2));
+            if (max.compareTo(min) < 0) {
+                BigDecimal t = min;
+                min = max;
+                max = t;
+            }
+            return new BigDecimal[]{min, max};
+        }
+        return new BigDecimal[]{BigDecimal.valueOf(8000), BigDecimal.valueOf(12000)};
+    }
+
+    private BigDecimal parseSalaryToYuan(String val) {
+        BigDecimal base = new BigDecimal(val);
+        return base.multiply(BigDecimal.valueOf(1000)).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String extractSkills(String text) {
+        List<String> tags = Arrays.asList("Java", "Spring", "MySQL", "Python", "Vue", "React", "测试", "Linux", "网络", "大数据");
+        List<String> hit = new ArrayList<>();
+        for (String t : tags) {
+            if (text.contains(t)) {
+                hit.add(t);
             }
         }
-
-        @Override
-        public Site getSite() {
-            return site;
+        if (hit.isEmpty()) {
+            return "Java,Python,前端";
         }
+        return String.join(",", hit);
+    }
+
+    private String buildJobKey(String source, String title, String company, String city) {
+        String src = source + "|" + title + "|" + company + "|" + city;
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(src.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash).substring(0, 43);
+        } catch (Exception e) {
+            return Integer.toHexString(src.hashCode());
+        }
+    }
+
+    private String firstMatch(String text, String regex) {
+        Matcher m = Pattern.compile(regex).matcher(text);
+        return m.find() ? m.group(1) : "";
+    }
+
+    private String firstMatchedOrDefault(String text, Pattern pattern, String def) {
+        Matcher m = pattern.matcher(text);
+        return m.find() ? m.group(1) : def;
+    }
+
+    private LocalDateTime parsePublishTime(String publishText) {
+        return LocalDateTime.now();
+    }
+
+    private String trimLen(String value, int maxLen) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() <= maxLen ? value : value.substring(0, maxLen);
+    }
+
+    private String safePart(String value, int start, int len) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        int s = Math.min(start, value.length());
+        int e = Math.min(s + len, value.length());
+        return value.substring(s, e);
     }
 }
 

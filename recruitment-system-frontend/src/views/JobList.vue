@@ -3,12 +3,20 @@
     <div class="toolbar">
       <el-input v-model="query.keyword" placeholder="关键词" style="width: 200px" />
       <el-input v-model="query.city" placeholder="城市" style="width: 160px; margin-left: 8px" />
+      <el-select v-model="query.status" placeholder="状态" style="width: 140px; margin-left: 8px" clearable>
+        <el-option label="新增" value="NEW" />
+        <el-option label="在岗" value="ACTIVE" />
+        <el-option label="下架" value="OFFLINE" />
+      </el-select>
       <el-button type="primary" style="margin-left: 8px" @click="loadData">查询</el-button>
       <el-button style="margin-left: 8px" @click="onRecommend">岗位推荐</el-button>
     </div>
     <el-table :data="list" style="width: 100%">
       <el-table-column prop="title" label="岗位名称" />
+      <el-table-column prop="companyName" label="公司" />
+      <el-table-column prop="sourceSite" label="来源" width="120" />
       <el-table-column prop="city" label="城市" width="120" />
+      <el-table-column prop="jobStatus" label="状态" width="110" />
       <el-table-column prop="experience" label="经验" width="120" />
       <el-table-column prop="education" label="学历" width="120" />
       <el-table-column label="薪资" width="160">
@@ -41,6 +49,7 @@ const query = reactive({
   companyName: '',
   experience: '',
   education: '',
+  status: '',
   pageNum: 1,
   pageSize: 10
 });

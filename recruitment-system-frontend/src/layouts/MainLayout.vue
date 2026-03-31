@@ -6,6 +6,8 @@
         <el-menu-item index="/">首页</el-menu-item>
         <el-menu-item index="/dashboard">数据可视化</el-menu-item>
         <el-menu-item index="/jobs">岗位列表</el-menu-item>
+        <el-menu-item index="/compare">数据对比</el-menu-item>
+        <el-menu-item index="/analysis">数据分析</el-menu-item>
         <el-menu-item index="/data">数据管理</el-menu-item>
         <el-menu-item index="/settings">系统设置</el-menu-item>
       </el-menu>

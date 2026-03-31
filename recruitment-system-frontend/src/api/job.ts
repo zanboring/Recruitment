@@ -6,6 +6,7 @@ export interface JobQuery {
   companyName?: string;
   experience?: string;
   education?: string;
+  status?: string;
   pageNum?: number;
   pageSize?: number;
 }
@@ -26,6 +27,22 @@ export function fetchJobStatSkill() {
   return http.get('/jobs/stat/skill');
 }
 
+export function fetchJobStatSalaryRange() {
+  return http.get('/jobs/stat/salary-range');
+}
+
+export function fetchJobStatEducation() {
+  return http.get('/jobs/stat/education');
+}
+
+export function fetchJobStatExperience() {
+  return http.get('/jobs/stat/experience');
+}
+
+export function fetchJobStatStatus() {
+  return http.get('/jobs/stat/status');
+}
+
 export function predictSalary(params: {
   city?: string;
   experience?: string;
@@ -37,5 +54,9 @@ export function predictSalary(params: {
 
 export function recommendJobs(params: { skills?: string; city?: string }) {
   return http.get('/jobs/recommend', { params });
+}
+
+export function fetchAnalysisSummary() {
+  return http.get('/jobs/analysis/summary');
 }
 

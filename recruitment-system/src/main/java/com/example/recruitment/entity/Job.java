@@ -10,6 +10,10 @@ public class Job {
     private Long id;
     private Long companyId;
     private String title;
+    private String companyName;
+    private String sourceSite;
+    private String jobKey;
+    private String jobStatus;
     private String city;
     private String experience;
     private String education;
@@ -19,6 +23,7 @@ public class Job {
     private String skills;
     private String jobDesc;
     private LocalDateTime publishTime;
+    private LocalDateTime lastSeenAt;
     private LocalDateTime createdAt;
 }
 

@@ -40,6 +40,10 @@ CREATE TABLE job (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     company_id BIGINT COMMENT '企业ID',
     title VARCHAR(100) NOT NULL COMMENT '岗位名称',
+    company_name VARCHAR(120) COMMENT '公司名称',
+    source_site VARCHAR(60) COMMENT '来源网站',
+    job_key VARCHAR(64) NOT NULL COMMENT '岗位唯一键',
+    job_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT '岗位状态：NEW/ACTIVE/OFFLINE',
     city VARCHAR(50) COMMENT '工作城市',
     experience VARCHAR(50) COMMENT '经验要求',
     education VARCHAR(50) COMMENT '学历要求',
@@ -49,6 +53,7 @@ CREATE TABLE job (
     skills VARCHAR(255) COMMENT '技能标签（逗号分隔）',
     job_desc TEXT COMMENT '岗位描述',
     publish_time DATETIME COMMENT '发布时间',
+    last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '最近抓取时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     CONSTRAINT fk_job_company FOREIGN KEY (company_id) REFERENCES company(id)
         ON DELETE SET NULL ON UPDATE CASCADE
@@ -57,6 +62,9 @@ CREATE TABLE job (
 CREATE INDEX idx_job_city ON job(city);
 CREATE INDEX idx_job_publish_time ON job(publish_time);
 CREATE INDEX idx_job_company_id ON job(company_id);
+CREATE INDEX idx_job_status ON job(job_status);
+CREATE INDEX idx_job_source_site ON job(source_site);
+CREATE UNIQUE INDEX uk_job_job_key ON job(job_key);
 
 -- 爬虫任务表
 DROP TABLE IF EXISTS crawl_task;

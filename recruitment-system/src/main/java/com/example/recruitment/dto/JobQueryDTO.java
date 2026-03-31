@@ -9,6 +9,7 @@ public class JobQueryDTO {
     private String companyName;
     private String experience;
     private String education;
+    private String status;
     private Integer pageNum = 1;
     private Integer pageSize = 10;
 }
