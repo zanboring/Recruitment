@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.recruitment.mapper.CrawlTaskMapper">
+
+    <resultMap id="CrawlTaskResultMap" type="com.example.recruitment.entity.CrawlTask">
+        <id column="id" property="id"/>
+        <result column="source_site" property="sourceSite"/>
+        <result column="keyword" property="keyword"/>
+        <result column="city" property="city"/>
+        <result column="status" property="status"/>
+        <result column="job_count" property="jobCount"/>
+        <result column="message" property="message"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="finished_at" property="finishedAt"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.example.recruitment.entity.CrawlTask" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO crawl_task (source_site, keyword, city, status, job_count, message, created_at, finished_at)
+        VALUES (#{sourceSite}, #{keyword}, #{city}, #{status}, #{jobCount}, #{message}, #{createdAt}, #{finishedAt})
+    </insert>
+
+    <update id="update" parameterType="com.example.recruitment.entity.CrawlTask">
+        UPDATE crawl_task
+        <set>
+            <if test="sourceSite != null">source_site = #{sourceSite},</if>
+            <if test="keyword != null">keyword = #{keyword},</if>
+            <if test="city != null">city = #{city},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="jobCount != null">job_count = #{jobCount},</if>
+            <if test="message != null">message = #{message},</if>
+            <if test="createdAt != null">created_at = #{createdAt},</if>
+            <if test="finishedAt != null">finished_at = #{finishedAt},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectById" parameterType="long" resultMap="CrawlTaskResultMap">
+        SELECT * FROM crawl_task WHERE id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="CrawlTaskResultMap">
+        SELECT * FROM crawl_task ORDER BY created_at DESC
+    </select>
+
+</mapper>
+
