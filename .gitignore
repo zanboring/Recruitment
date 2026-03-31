@@ -1,12 +1,35 @@
-# Maven build output
+########################
+# Build artifacts
+########################
 **/target/
-
-# Node/Vite build output
 **/dist/
+
+########################
+# Dependencies
+########################
 **/node_modules/
 
-# IDE
+########################
+# IDE / Project files
+########################
 .idea/
 *.iml
 .vscode/
+*.classpath
+*.project
+*.settings/
+
+########################
+# OS / Misc
+########################
+.DS_Store
+Thumbs.db
+
+########################
+# Logs & temp files
+########################
+logs/
+*.log
+*.tmp
+
 

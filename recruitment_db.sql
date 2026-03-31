@@ -17,6 +17,10 @@ CREATE TABLE user (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
+-- 默认管理员账号（用户名：admin，密码：123456）
+INSERT INTO user (username, password, salt, role, email, created_at)
+VALUES ('admin', 'ZDoWXd+YGTGxeMkoxzJp2YevU/WOkv4dqxI+V7mkpQ8=', 'recruitment-salt-001', 'ADMIN', 'admin@example.com', NOW());
+
 -- 企业表
 DROP TABLE IF EXISTS company;
 CREATE TABLE company (
@@ -50,6 +54,10 @@ CREATE TABLE job (
         ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='招聘信息表';
 
+CREATE INDEX idx_job_city ON job(city);
+CREATE INDEX idx_job_publish_time ON job(publish_time);
+CREATE INDEX idx_job_company_id ON job(company_id);
+
 -- 爬虫任务表
 DROP TABLE IF EXISTS crawl_task;
 CREATE TABLE crawl_task (
@@ -63,6 +71,8 @@ CREATE TABLE crawl_task (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     finished_at DATETIME COMMENT '完成时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='爬虫任务表';
+
+CREATE INDEX idx_crawl_task_created_at ON crawl_task(created_at);
 
 -- 系统日志表
 DROP TABLE IF EXISTS sys_log;
@@ -78,4 +88,7 @@ CREATE TABLE sys_log (
     error_msg VARCHAR(500) COMMENT '错误信息',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统日志表';
+
+CREATE INDEX idx_sys_log_created_at ON sys_log(created_at);
+CREATE INDEX idx_sys_log_username ON sys_log(username);
 

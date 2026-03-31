@@ -19,7 +19,7 @@
 ### 数据库初始化
 
 ```bash
-mysql -u root -p < recruitment_db.sql
+mysql -u root -p123456 < recruitment_db.sql
 ```
 
 ### 后端启动命令
