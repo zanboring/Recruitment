@@ -10,6 +10,8 @@
         <result column="title" property="title"/>
         <result column="company_name" property="companyName"/>
         <result column="source_site" property="sourceSite"/>
+        <result column="unique_key" property="uniqueKey"/>
+        <result column="status" property="status"/>
         <result column="job_key" property="jobKey"/>
         <result column="job_status" property="jobStatus"/>
         <result column="city" property="city"/>
@@ -27,10 +29,10 @@
 
     <insert id="insert" parameterType="com.example.recruitment.entity.Job" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO job
-        (company_id, title, company_name, source_site, job_key, job_status, city, experience, education,
+        (company_id, title, company_name, source_site, unique_key, status, job_key, job_status, city, experience, education,
          min_salary, max_salary, salary_unit, skills, job_desc, publish_time, last_seen_at, created_at)
         VALUES
-        (#{companyId}, #{title}, #{companyName}, #{sourceSite}, #{jobKey}, #{jobStatus}, #{city}, #{experience}, #{education},
+        (#{companyId}, #{title}, #{companyName}, #{sourceSite}, #{uniqueKey}, #{status}, #{jobKey}, #{jobStatus}, #{city}, #{experience}, #{education},
          #{minSalary}, #{maxSalary}, #{salaryUnit}, #{skills}, #{jobDesc}, #{publishTime}, #{lastSeenAt}, #{createdAt})
     </insert>
 
@@ -41,6 +43,8 @@
             <if test="title != null">title = #{title},</if>
             <if test="companyName != null">company_name = #{companyName},</if>
             <if test="sourceSite != null">source_site = #{sourceSite},</if>
+            <if test="uniqueKey != null">unique_key = #{uniqueKey},</if>
+            <if test="status != null">status = #{status},</if>
             <if test="jobKey != null">job_key = #{jobKey},</if>
             <if test="jobStatus != null">job_status = #{jobStatus},</if>
             <if test="city != null">city = #{city},</if>
@@ -97,7 +101,7 @@
     <select id="statByCity" resultType="com.example.recruitment.vo.JobStatVO">
         SELECT city AS name, COUNT(*) AS count, AVG((min_salary + max_salary) / 2) AS avgSalary
         FROM job
-        WHERE job_status != 'OFFLINE'
+        WHERE status = 1
         GROUP BY city
         ORDER BY count DESC
     </select>
@@ -105,7 +109,7 @@
     <select id="statByCompany" resultType="com.example.recruitment.vo.JobStatVO">
         SELECT company_name AS name, COUNT(*) AS count, AVG((min_salary + max_salary) / 2) AS avgSalary
         FROM job
-        WHERE job_status != 'OFFLINE'
+        WHERE status = 1
         GROUP BY company_name
         ORDER BY count DESC
     </select>
@@ -118,7 +122,7 @@
                  FROM job j
                           JOIN (SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5) numbers
                                ON CHAR_LENGTH(j.skills) - CHAR_LENGTH(REPLACE(j.skills, ',', '')) >= numbers.n - 1
-                 WHERE j.job_status != 'OFFLINE'
+                 WHERE j.status = 1
              ) t
         WHERE skill != ''
         GROUP BY skill
@@ -135,7 +139,7 @@
                COUNT(*) AS count,
                AVG((min_salary + max_salary) / 2) AS avgSalary
         FROM job
-        WHERE job_status != 'OFFLINE'
+        WHERE status = 1
         GROUP BY name
         ORDER BY avgSalary
     </select>
@@ -143,7 +147,7 @@
     <select id="statByEducation" resultType="com.example.recruitment.vo.JobStatVO">
         SELECT education AS name, COUNT(*) AS count, AVG((min_salary + max_salary) / 2) AS avgSalary
         FROM job
-        WHERE job_status != 'OFFLINE'
+        WHERE status = 1
         GROUP BY education
         ORDER BY count DESC
     </select>
@@ -151,7 +155,7 @@
     <select id="statByExperience" resultType="com.example.recruitment.vo.JobStatVO">
         SELECT experience AS name, COUNT(*) AS count, AVG((min_salary + max_salary) / 2) AS avgSalary
         FROM job
-        WHERE job_status != 'OFFLINE'
+        WHERE status = 1
         GROUP BY experience
         ORDER BY count DESC
     </select>
@@ -168,7 +172,7 @@
                COUNT(*) AS count,
                AVG((min_salary + max_salary) / 2) AS avgSalary
         FROM job
-        WHERE job_status != 'OFFLINE'
+        WHERE status = 1
           AND title IS NOT NULL
           AND title != ''
         GROUP BY title
@@ -180,18 +184,18 @@
         SELECT
             SUM(CASE WHEN publish_time >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS last7_days,
             SUM(CASE
-                    WHEN publish_time < DATE_SUB(NOW(), INTERVAL 7 DAY)
+                    WHEN publish_time <![CDATA[<]]> DATE_SUB(NOW(), INTERVAL 7 DAY)
                      AND publish_time >= DATE_SUB(NOW(), INTERVAL 14 DAY)
                         THEN 1 ELSE 0 END) AS prev7_days
         FROM job
-        WHERE job_status != 'OFFLINE'
+        WHERE status = 1
     </select>
 
     <select id="predictSalary" parameterType="map" resultType="java.math.BigDecimal">
         SELECT AVG((min_salary + max_salary) / 2) AS avgSalary
         FROM job
         <where>
-            job_status != 'OFFLINE'
+            status = 1
             <if test="city != null and city != ''">
                 AND city = #{city}
             </if>
@@ -214,26 +218,24 @@
         </if>
     </select>
 
-    <select id="selectByJobKey" parameterType="string" resultMap="JobResultMap">
-        SELECT * FROM job WHERE job_key = #{jobKey} LIMIT 1
+    <select id="selectByUniqueKey" parameterType="string" resultMap="JobResultMap">
+        SELECT * FROM job WHERE unique_key = #{uniqueKey} LIMIT 1
     </select>
 
-    <update id="markOfflineByAbsentKeys">
+    <update id="markAllInactive">
         UPDATE job
-        SET job_status = 'OFFLINE'
-        WHERE source_site = #{sourceSite}
-          AND job_status != 'OFFLINE'
-          AND job_key NOT IN
+        SET status = 0, job_status = 'OFFLINE'
+    </update>
+
+    <update id="activateByUniqueKeys">
+        UPDATE job
+        SET status = 1,
+            job_status = CASE WHEN job_status = 'OFFLINE' THEN 'ACTIVE' ELSE job_status END,
+            last_seen_at = NOW()
+        WHERE unique_key IN
         <foreach collection="keys" item="k" open="(" separator="," close=")">
             #{k}
         </foreach>
-    </update>
-
-    <update id="markOfflineWhenNoKeys">
-        UPDATE job
-        SET job_status = 'OFFLINE'
-        WHERE source_site = #{sourceSite}
-          AND job_status != 'OFFLINE'
     </update>
 </mapper>
 

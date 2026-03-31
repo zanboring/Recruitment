@@ -12,6 +12,8 @@ public class Job {
     private String title;
     private String companyName;
     private String sourceSite;
+    private String uniqueKey;
+    private Integer status;
     private String jobKey;
     private String jobStatus;
     private String city;

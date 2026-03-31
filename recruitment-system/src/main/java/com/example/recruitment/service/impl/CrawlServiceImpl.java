@@ -86,27 +86,24 @@ public class CrawlServiceImpl implements CrawlService {
         List<String> keywords = parseKeywords(task.getKeyword());
         int inserted = 0;
         int updated = 0;
-        int offline = 0;
+        int offline = jobMapper.markAllInactive();
         StringBuilder errors = new StringBuilder();
+        Set<String> activeUniqueKeys = new HashSet<>();
 
         try {
             for (String site : sites) {
-                Set<String> seenKeys = new HashSet<>();
-                boolean crawledAnyForSite = false;
                 for (String keyword : keywords) {
                     List<Job> crawled = crawlBySite(site, keyword, task.getCity());
-                    if (!crawled.isEmpty()) {
-                        crawledAnyForSite = true;
-                    }
                     for (Job job : crawled) {
-                        String jobKey = job.getJobKey();
-                        if (jobKey == null || jobKey.isBlank()) {
+                        String uniqueKey = job.getUniqueKey();
+                        if (uniqueKey == null || uniqueKey.isBlank()) {
                             continue;
                         }
-                        seenKeys.add(jobKey);
-                        Job existed = jobMapper.selectByJobKey(jobKey);
+                        activeUniqueKeys.add(uniqueKey);
+                        Job existed = jobMapper.selectByUniqueKey(uniqueKey);
                         if (existed == null) {
                             job.setJobStatus("NEW");
+                            job.setStatus(1);
                             job.setCreatedAt(LocalDateTime.now());
                             jobMapper.insert(job);
                             inserted++;
@@ -123,21 +120,20 @@ public class CrawlServiceImpl implements CrawlService {
                             existed.setPublishTime(job.getPublishTime());
                             existed.setSalaryUnit("monthly");
                             existed.setJobStatus("ACTIVE");
+                            existed.setStatus(1);
                             existed.setLastSeenAt(LocalDateTime.now());
                             jobMapper.update(existed);
                             updated++;
                         }
                     }
                 }
-                // 只有当该站点确实成功抓到过数据时，才进行“缺失下架”标记，避免抓取失败导致误下架历史数据
-                if (crawledAnyForSite) {
-                    offline += seenKeys.isEmpty()
-                            ? jobMapper.markOfflineWhenNoKeys(site)
-                            : jobMapper.markOfflineByAbsentKeys(site, new ArrayList<>(seenKeys));
-                }
             }
         } catch (Exception e) {
             errors.append(e.getMessage());
+        }
+
+        if (!activeUniqueKeys.isEmpty()) {
+            jobMapper.activateByUniqueKeys(new ArrayList<>(activeUniqueKeys));
         }
 
         // 全站点都没抓到数据：插入少量示例数据保证可视化能正常展示
@@ -146,6 +142,7 @@ public class CrawlServiceImpl implements CrawlService {
             for (Job j : fallback) {
                 try {
                     j.setJobStatus("NEW");
+                    j.setStatus(1);
                     j.setCreatedAt(LocalDateTime.now());
                     j.setLastSeenAt(LocalDateTime.now());
                     jobMapper.insert(j);
@@ -205,7 +202,7 @@ public class CrawlServiceImpl implements CrawlService {
                 Job job = parseCard(site, card, city);
                 if (job != null && job.getTitle() != null && !job.getTitle().isBlank()) {
                     jobs.add(job);
-                    if (jobs.size() >= 80) {
+                    if (jobs.size() >= 10) {
                         break;
                     }
                 }
@@ -277,6 +274,8 @@ public class CrawlServiceImpl implements CrawlService {
         job.setPublishTime(parsePublishTime(publish));
         job.setLastSeenAt(LocalDateTime.now());
         job.setJobKey(buildJobKey(sourceSite, job.getTitle(), job.getCompanyName(), job.getCity()));
+        job.setUniqueKey(job.getJobKey());
+        job.setStatus(1);
         return job;
     }
 
@@ -404,6 +403,8 @@ public class CrawlServiceImpl implements CrawlService {
             j.setSourceSite(sourceSite);
             j.setLastSeenAt(LocalDateTime.now());
             j.setJobKey(buildJobKey(sourceSite, j.getTitle(), j.getCompanyName(), j.getCity()));
+            j.setUniqueKey(j.getJobKey());
+            j.setStatus(1);
             jobs.add(j);
         }
         return jobs;

@@ -3,7 +3,7 @@ import { useUserStore } from '@/store/user';
 import { ElMessage } from 'element-plus';
 
 const instance = axios.create({
-  baseURL: '/api',
+  baseURL: 'http://localhost:8080/api',
   timeout: 10000
 });
 
