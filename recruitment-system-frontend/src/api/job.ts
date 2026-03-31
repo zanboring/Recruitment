@@ -60,3 +60,7 @@ export function fetchAnalysisSummary() {
   return http.get('/jobs/analysis/summary');
 }
 
+export function fetchTopTitles() {
+  return http.get('/jobs/analysis/top-titles');
+}
+

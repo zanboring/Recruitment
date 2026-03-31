@@ -3,6 +3,7 @@ package com.example.recruitment.mapper;
 import com.example.recruitment.dto.JobQueryDTO;
 import com.example.recruitment.entity.Job;
 import com.example.recruitment.vo.JobStatVO;
+import com.example.recruitment.vo.JobTrendVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -35,6 +36,10 @@ public interface JobMapper {
     List<JobStatVO> statByExperience();
 
     List<JobStatVO> statByStatus();
+
+    List<JobStatVO> statTopTitles();
+
+    JobTrendVO jobTrendLast7Days();
 
     BigDecimal predictSalary(@Param("city") String city,
                              @Param("experience") String experience,

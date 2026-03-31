@@ -5,6 +5,7 @@ import com.example.recruitment.entity.Job;
 import com.example.recruitment.exception.BusinessException;
 import com.example.recruitment.mapper.JobMapper;
 import com.example.recruitment.service.JobService;
+import com.example.recruitment.vo.JobTrendVO;
 import com.example.recruitment.vo.JobStatVO;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
@@ -92,6 +93,11 @@ public class JobServiceImpl implements JobService {
     }
 
     @Override
+    public List<JobStatVO> statTopTitles() {
+        return jobMapper.statTopTitles();
+    }
+
+    @Override
     public BigDecimal predictSalary(String city, String experience, String education, String skills) {
         BigDecimal avg = jobMapper.predictSalary(city, experience, education, skills);
         if (avg == null) {
@@ -124,21 +130,44 @@ public class JobServiceImpl implements JobService {
         List<JobStatVO> cityStats = statByCity();
         List<JobStatVO> skillStats = statBySkill();
         List<JobStatVO> salaryStats = statBySalaryRange();
+        List<JobStatVO> titleStats = statTopTitles();
 
         JobStatVO topCity = cityStats.isEmpty() ? null : cityStats.get(0);
         JobStatVO topSkill = skillStats.isEmpty() ? null : skillStats.get(0);
+        JobStatVO topTitle = titleStats.isEmpty() ? null : titleStats.get(0);
         BigDecimal avg = predictSalary(null, null, null, null);
         JobStatVO topBand = salaryStats.stream()
                 .filter(Objects::nonNull)
                 .max(Comparator.comparingLong(v -> v.getCount() == null ? 0L : v.getCount()))
                 .orElse(null);
 
+        JobTrendVO trend = jobMapper.jobTrendLast7Days();
+        long last7 = trend == null || trend.getLast7Days() == null ? 0 : trend.getLast7Days();
+        long prev7 = trend == null || trend.getPrev7Days() == null ? 0 : trend.getPrev7Days();
+        String trendText;
+        if (prev7 == 0 && last7 == 0) {
+            trendText = "暂无可用趋势数据";
+        } else if (prev7 == 0) {
+            trendText = "近期需求明显增加";
+        } else {
+            double ratio = (last7 * 1.0d) / prev7;
+            if (ratio >= 1.15d) {
+                trendText = "近期需求呈上升趋势";
+            } else if (ratio <= 0.85d) {
+                trendText = "近期需求呈回落趋势";
+            } else {
+                trendText = "近期需求整体较为稳定";
+            }
+        }
+
         return String.format(
-                "当前岗位需求较集中的城市为%s；热门技能以%s为代表；平均薪资约为%s元。薪资分布以%s区间为主，整体呈现技术岗位需求持续稳定的趋势。",
+                "当前岗位需求较集中的城市为%s；热门岗位以%s为代表；热门技能以%s为代表；平均薪资约为%s元。薪资分布以%s区间为主，且%s。",
                 topCity == null ? "暂无数据" : topCity.getName(),
+                topTitle == null ? "暂无数据" : topTitle.getName(),
                 topSkill == null ? "暂无数据" : topSkill.getName(),
                 avg == null ? "0.00" : avg.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString(),
-                topBand == null ? "暂无数据" : topBand.getName()
+                topBand == null ? "暂无数据" : topBand.getName(),
+                trendText
         );
     }
 

@@ -34,6 +34,8 @@ public interface JobService {
 
     List<JobStatVO> statByStatus();
 
+    List<JobStatVO> statTopTitles();
+
     BigDecimal predictSalary(String city, String experience, String education, String skills);
 
     List<Job> recommendJobs(String skills, String city);

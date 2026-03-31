@@ -108,5 +108,10 @@ public class JobController {
     public Result<String> analysisSummary() {
         return Result.success(jobService.buildAnalysisSummary());
     }
+
+    @GetMapping("/analysis/top-titles")
+    public Result<List<JobStatVO>> topTitles() {
+        return Result.success(jobService.statTopTitles());
+    }
 }
 
