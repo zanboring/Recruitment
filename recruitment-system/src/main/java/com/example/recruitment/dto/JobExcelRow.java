@@ -1,11 +1,9 @@
 package com.example.recruitment.dto;
 
 import com.alibaba.excel.annotation.ExcelProperty;
-import lombok.Data;
 
 import java.math.BigDecimal;
 
-@Data
 public class JobExcelRow {
 
     @ExcelProperty(index = 0, value = "公司ID")
@@ -40,5 +38,27 @@ public class JobExcelRow {
 
     @ExcelProperty(index = 10, value = "发布时间（可选）")
     private String publishTime;
-}
 
+    public Long getCompanyId() { return companyId; }
+    public void setCompanyId(Long companyId) { this.companyId = companyId; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+    public String getExperience() { return experience; }
+    public void setExperience(String experience) { this.experience = experience; }
+    public String getEducation() { return education; }
+    public void setEducation(String education) { this.education = education; }
+    public BigDecimal getMinSalary() { return minSalary; }
+    public void setMinSalary(BigDecimal minSalary) { this.minSalary = minSalary; }
+    public BigDecimal getMaxSalary() { return maxSalary; }
+    public void setMaxSalary(BigDecimal maxSalary) { this.maxSalary = maxSalary; }
+    public String getSalaryUnit() { return salaryUnit; }
+    public void setSalaryUnit(String salaryUnit) { this.salaryUnit = salaryUnit; }
+    public String getSkills() { return skills; }
+    public void setSkills(String skills) { this.skills = skills; }
+    public String getJobDesc() { return jobDesc; }
+    public void setJobDesc(String jobDesc) { this.jobDesc = jobDesc; }
+    public String getPublishTime() { return publishTime; }
+    public void setPublishTime(String publishTime) { this.publishTime = publishTime; }
+}

@@ -14,5 +14,7 @@ public interface CrawlTaskMapper {
     CrawlTask selectById(Long id);
 
     List<CrawlTask> selectAll();
+
+    int deleteById(Long id);
 }
 

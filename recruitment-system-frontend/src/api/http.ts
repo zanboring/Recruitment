@@ -4,11 +4,23 @@ import { ElMessage } from 'element-plus';
 
 const instance = axios.create({
   baseURL: '/api',
-  timeout: 10000
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json;charset=utf-8'
+  }
 });
 
 instance.interceptors.request.use(
   (config) => {
+    // 打印请求日志
+    console.log('🚀 Request:', {
+      url: config.url,
+      method: config.method,
+      params: config.params,
+      data: config.data,
+      headers: config.headers
+    });
+    
     const userStore = useUserStore();
     if (userStore.token) {
       config.headers = config.headers || {};
@@ -16,11 +28,22 @@ instance.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('❌ Request Error:', error);
+    return Promise.reject(error);
+  }
 );
 
 instance.interceptors.response.use(
   (response) => {
+    // 打印响应日志
+    console.log('✅ Response:', {
+      url: response.config.url,
+      status: response.status,
+      statusText: response.statusText,
+      data: response.data
+    });
+    
     // File download: let browser handle blob/arraybuffer directly
     if (response.config && (response.config.responseType === 'blob' || response.config.responseType === 'arraybuffer')) {
       return response.data;
@@ -33,6 +56,11 @@ instance.interceptors.response.use(
     return res.data;
   },
   (error) => {
+    console.error('❌ Response Error:', {
+      message: error.message,
+      config: error.config,
+      response: error.response
+    });
     ElMessage.error(error.message || '网络错误');
     return Promise.reject(error);
   }

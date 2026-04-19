@@ -1,36 +1,133 @@
 <template>
-  <div>
-    <el-card>
-      <div class="title">数据分析结果</div>
-      <p class="summary">{{ summary }}</p>
+  <div class="analysis-page">
+    <el-card class="summary-card" shadow="never">
+      <div class="card-header">
+        <div class="title">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>数据分析报告</span>
+        </div>
+        <el-button type="primary" size="small" @click="exportReport">
+          <el-icon><Download /></el-icon>
+          导出报告
+        </el-button>
+      </div>
+      <div class="summary-content">
+        <el-alert
+          :title="summary"
+          type="info"
+          :closable="false"
+          show-icon
+          class="summary-alert"
+        />
+      </div>
     </el-card>
 
-    <el-row :gutter="16" style="margin-top: 16px">
+    <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
-        <el-card>
-          <div class="sub-title">热门岗位排行</div>
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="chart-header">
+              <div class="chart-title">
+                <el-icon><Trophy /></el-icon>
+                <span>热门岗位排行 TOP10</span>
+              </div>
+              <el-tag type="warning" size="small">热门</el-tag>
+            </div>
+          </template>
           <div ref="titleChartRef" class="chart" />
         </el-card>
       </el-col>
       <el-col :span="12">
-        <el-card>
-          <div class="sub-title">城市岗位需求分布</div>
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="chart-header">
+              <div class="chart-title">
+                <el-icon><Location /></el-icon>
+                <span>城市岗位需求分布</span>
+              </div>
+              <el-tag type="primary" size="small">分布</el-tag>
+            </div>
+          </template>
           <div ref="cityChartRef" class="chart" />
         </el-card>
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" style="margin-top: 16px">
+    <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
-        <el-card>
-          <div class="sub-title">薪资水平统计</div>
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="chart-header">
+              <div class="chart-title">
+                <el-icon><Money /></el-icon>
+                <span>薪资水平统计</span>
+              </div>
+              <el-tag type="success" size="small">薪资</el-tag>
+            </div>
+          </template>
           <div ref="salaryChartRef" class="chart" />
         </el-card>
       </el-col>
       <el-col :span="12">
-        <el-card>
-          <div class="sub-title">高频技能词</div>
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="chart-header">
+              <div class="chart-title">
+                <el-icon><Star /></el-icon>
+                <span>高频技能词 TOP12</span>
+              </div>
+              <el-tag type="danger" size="small">技能</el-tag>
+            </div>
+          </template>
           <div ref="skillChartRef" class="chart" />
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="20" style="margin-top: 20px">
+      <el-col :span="12">
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="chart-header">
+              <div class="chart-title">
+                <el-icon><Reading /></el-icon>
+                <span>学历要求分布</span>
+              </div>
+              <el-tag type="info" size="small">学历</el-tag>
+            </div>
+          </template>
+          <div ref="educationChartRef" class="chart" />
+        </el-card>
+      </el-col>
+      <el-col :span="12">
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="chart-header">
+              <div class="chart-title">
+                <el-icon><Clock /></el-icon>
+                <span>工作经验要求分布</span>
+              </div>
+              <el-tag type="warning" size="small">经验</el-tag>
+            </div>
+          </template>
+          <div ref="experienceChartRef" class="chart" />
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="20" style="margin-top: 20px">
+      <el-col :span="24">
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="chart-header">
+              <div class="chart-title">
+                <el-icon><OfficeBuilding /></el-icon>
+                <span>热门公司招聘排行 TOP10</span>
+              </div>
+              <el-tag type="primary" size="small">公司</el-tag>
+            </div>
+          </template>
+          <div ref="companyChartRef" class="chart" style="height: 400px" />
         </el-card>
       </el-col>
     </el-row>
@@ -40,12 +137,27 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import * as echarts from 'echarts';
+import { ElMessage } from 'element-plus';
+import {
+  DataAnalysis,
+  Download,
+  Trophy,
+  Location,
+  Money,
+  Star,
+  Reading,
+  Clock,
+  OfficeBuilding
+} from '@element-plus/icons-vue';
 import {
   fetchAnalysisSummary,
   fetchJobStatCity,
   fetchJobStatSalaryRange,
   fetchJobStatSkill,
-  fetchTopTitles
+  fetchTopTitles,
+  fetchJobStatEducation,
+  fetchJobStatExperience,
+  fetchJobStatCompany
 } from '@/api/job';
 
 const summary = ref('正在分析...');
@@ -53,85 +165,335 @@ const titleChartRef = ref<HTMLDivElement | null>(null);
 const skillChartRef = ref<HTMLDivElement | null>(null);
 const cityChartRef = ref<HTMLDivElement | null>(null);
 const salaryChartRef = ref<HTMLDivElement | null>(null);
+const educationChartRef = ref<HTMLDivElement | null>(null);
+const experienceChartRef = ref<HTMLDivElement | null>(null);
+const companyChartRef = ref<HTMLDivElement | null>(null);
 
 const init = async () => {
-  const [summaryText, cityData, skillData, salaryRangeData, topTitles] = await Promise.all([
-    fetchAnalysisSummary(),
-    fetchJobStatCity(),
-    fetchJobStatSkill(),
-    fetchJobStatSalaryRange(),
-    fetchTopTitles()
-  ]);
-  summary.value = (summaryText as string) || '暂无数据';
+  try {
+    const [summaryText, cityData, skillData, salaryRangeData, topTitles, educationData, experienceData, companyData] = await Promise.all([
+      fetchAnalysisSummary(),
+      fetchJobStatCity(),
+      fetchJobStatSkill(),
+      fetchJobStatSalaryRange(),
+      fetchTopTitles(),
+      fetchJobStatEducation(),
+      fetchJobStatExperience(),
+      fetchJobStatCompany()
+    ]);
+    
+    summary.value = (summaryText as string) || '暂无数据';
 
-  if (cityChartRef.value) {
-    const chart = echarts.init(cityChartRef.value);
-    chart.setOption({
-      tooltip: { trigger: 'item' },
-      series: [
-        {
-          type: 'pie',
-          radius: ['35%', '68%'],
-          data: (cityData as any[]).slice(0, 12).map((i: any) => ({
-            name: i.name || '未知',
-            value: i.count || 0
-          }))
-        }
-      ]
-    });
-  }
+    const cityColors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc'];
 
-  if (titleChartRef.value) {
-    const chart = echarts.init(titleChartRef.value);
-    chart.setOption({
-      tooltip: {},
-      xAxis: { type: 'category', data: (topTitles as any[]).map((i: any) => i.name).slice(0, 10) },
-      yAxis: { type: 'value' },
-      series: [{ type: 'bar', data: (topTitles as any[]).map((i: any) => i.count).slice(0, 10), barMaxWidth: 48 }]
-    });
-  }
+    if (cityChartRef.value) {
+      const chart = echarts.init(cityChartRef.value);
+      chart.setOption({
+        tooltip: { 
+          trigger: 'item',
+          formatter: '{b}: {c}个岗位 ({d}%)'
+        },
+        legend: {
+          orient: 'vertical',
+          right: 10,
+          top: 'center'
+        },
+        series: [
+          {
+            name: '岗位数量',
+            type: 'pie',
+            radius: ['40%', '70%'],
+            avoidLabelOverlap: false,
+            itemStyle: {
+              borderRadius: 10,
+              borderColor: '#fff',
+              borderWidth: 2
+            },
+            label: {
+              show: true,
+              formatter: '{b}\n{c}个'
+            },
+            data: (cityData as any[]).slice(0, 8).map((i: any, index: number) => ({
+              name: i.name || '未知',
+              value: i.count || 0,
+              itemStyle: { color: cityColors[index % cityColors.length] }
+            }))
+          }
+        ]
+      });
+    }
 
-  if (salaryChartRef.value) {
-    const chart = echarts.init(salaryChartRef.value);
-    chart.setOption({
-      tooltip: {},
-      xAxis: { type: 'category', data: (salaryRangeData as any[]).map((i: any) => i.name).slice(0, 6) },
-      yAxis: { type: 'value' },
-      series: [{ type: 'bar', data: (salaryRangeData as any[]).map((i: any) => i.count).slice(0, 6), barMaxWidth: 48 }]
-    });
-  }
+    if (titleChartRef.value) {
+      const chart = echarts.init(titleChartRef.value);
+      chart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          containLabel: true
+        },
+        xAxis: { 
+          type: 'category',
+          data: (topTitles as any[]).map((i: any) => i.name).slice(0, 10),
+          axisLabel: {
+            interval: 0,
+            rotate: 30
+          }
+        },
+        yAxis: { type: 'value' },
+        series: [{
+          type: 'bar',
+          data: (topTitles as any[]).map((i: any) => i.count).slice(0, 10),
+          barMaxWidth: 40,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#83bff6' },
+              { offset: 0.5, color: '#188df0' },
+              { offset: 1, color: '#188df0' }
+            ]),
+            borderRadius: [5, 5, 0, 0]
+          }
+        }]
+      });
+    }
 
-  if (skillChartRef.value) {
-    const chart = echarts.init(skillChartRef.value);
-    chart.setOption({
-      tooltip: {},
-      xAxis: { type: 'category', data: (skillData as any[]).map((i: any) => i.name).slice(0, 12) },
-      yAxis: { type: 'value' },
-      series: [{ type: 'bar', data: (skillData as any[]).map((i: any) => i.count).slice(0, 12) }]
-    });
+    if (salaryChartRef.value) {
+      const chart = echarts.init(salaryChartRef.value);
+      chart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          containLabel: true
+        },
+        xAxis: { 
+          type: 'category',
+          data: (salaryRangeData as any[]).map((i: any) => i.name).slice(0, 6)
+        },
+        yAxis: { type: 'value' },
+        series: [{
+          type: 'bar',
+          data: (salaryRangeData as any[]).map((i: any) => i.count).slice(0, 6),
+          barMaxWidth: 50,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#91cc75' },
+              { offset: 1, color: '#73c0de' }
+            ]),
+            borderRadius: [5, 5, 0, 0]
+          }
+        }]
+      });
+    }
+
+    if (skillChartRef.value) {
+      const chart = echarts.init(skillChartRef.value);
+      chart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          containLabel: true
+        },
+        xAxis: { 
+          type: 'category',
+          data: (skillData as any[]).map((i: any) => i.name).slice(0, 12),
+          axisLabel: {
+            interval: 0,
+            rotate: 45
+          }
+        },
+        yAxis: { type: 'value' },
+        series: [{
+          type: 'bar',
+          data: (skillData as any[]).map((i: any) => i.count).slice(0, 12),
+          barMaxWidth: 35,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#fac858' },
+              { offset: 1, color: '#ee6666' }
+            ]),
+            borderRadius: [5, 5, 0, 0]
+          }
+        }]
+      });
+    }
+
+    if (educationChartRef.value) {
+      const chart = echarts.init(educationChartRef.value);
+      chart.setOption({
+        tooltip: {
+          trigger: 'item',
+          formatter: '{b}: {c}个岗位 ({d}%)'
+        },
+        series: [
+          {
+            name: '学历要求',
+            type: 'pie',
+            radius: '70%',
+            data: (educationData as any[]).map((i: any) => ({
+              name: i.name || '未知',
+              value: i.count || 0
+            })),
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      });
+    }
+
+    if (experienceChartRef.value) {
+      const chart = echarts.init(experienceChartRef.value);
+      chart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          containLabel: true
+        },
+        xAxis: { 
+          type: 'category',
+          data: (experienceData as any[]).map((i: any) => i.name)
+        },
+        yAxis: { type: 'value' },
+        series: [{
+          type: 'bar',
+          data: (experienceData as any[]).map((i: any) => i.count),
+          barMaxWidth: 50,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#9a60b4' },
+              { offset: 1, color: '#ea7ccc' }
+            ]),
+            borderRadius: [5, 5, 0, 0]
+          }
+        }]
+      });
+    }
+
+    if (companyChartRef.value) {
+      const chart = echarts.init(companyChartRef.value);
+      chart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          containLabel: true
+        },
+        xAxis: { 
+          type: 'value'
+        },
+        yAxis: { 
+          type: 'category',
+          data: (companyData as any[]).map((i: any) => i.name).slice(0, 10).reverse()
+        },
+        series: [{
+          type: 'bar',
+          data: (companyData as any[]).map((i: any) => i.count).slice(0, 10).reverse(),
+          barMaxWidth: 40,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0, color: '#5470c6' },
+              { offset: 1, color: '#91cc75' }
+            ]),
+            borderRadius: [0, 5, 5, 0]
+          }
+        }]
+      });
+    }
+  } catch (error) {
+    summary.value = '暂无可分析数据';
   }
 };
 
+const exportReport = () => {
+  ElMessage.success('报告导出功能开发中...');
+};
+
 onMounted(() => {
-  init().catch(() => {
-    summary.value = '暂无可分析数据';
-  });
+  init();
 });
 </script>
 
 <style scoped>
-.title {
-  font-weight: 600;
+.analysis-page {
+  padding: 20px;
 }
-.sub-title {
-  font-weight: 600;
-  margin-bottom: 8px;
+
+.summary-card {
+  margin-bottom: 20px;
 }
-.summary {
-  margin-top: 10px;
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header .title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.summary-content {
+  margin-top: 16px;
+}
+
+.summary-alert {
+  font-size: 14px;
   line-height: 1.8;
 }
+
+.chart-card {
+  height: 100%;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chart-header .chart-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
 .chart {
-  height: 320px;
+  height: 350px;
+  width: 100%;
 }
 </style>

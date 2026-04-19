@@ -2,6 +2,7 @@ package com.example.recruitment.service;
 
 import com.example.recruitment.dto.JobQueryDTO;
 import com.example.recruitment.entity.Job;
+import com.example.recruitment.vo.AIFeedbackVO;
 import com.example.recruitment.vo.JobStatVO;
 import com.github.pagehelper.PageInfo;
 
@@ -41,5 +42,12 @@ public interface JobService {
     List<Job> recommendJobs(String skills, String city);
 
     String buildAnalysisSummary();
+
+    /**
+     * AI智能分析 - 基于筛选条件分析优质岗位、推荐理由、需求趋势、求职建议
+     * @param dto 筛选条件
+     * @return AI分析结果
+     */
+    AIFeedbackVO analyzeWithAI(JobQueryDTO dto);
 }
 

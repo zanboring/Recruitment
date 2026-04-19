@@ -44,5 +44,9 @@
         SELECT * FROM crawl_task ORDER BY created_at DESC
     </select>
 
+    <delete id="deleteById" parameterType="long">
+        DELETE FROM crawl_task WHERE id = #{id}
+    </delete>
+
 </mapper>
 

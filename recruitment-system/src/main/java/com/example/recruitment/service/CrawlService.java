@@ -11,5 +11,7 @@ public interface CrawlService {
     void startTask(Long taskId);
 
     List<CrawlTask> listTasks();
+
+    void deleteTask(Long taskId);
 }
 

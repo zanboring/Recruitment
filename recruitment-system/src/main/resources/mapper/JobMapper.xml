@@ -90,6 +90,15 @@
             <if test="status != null and status != ''">
                 AND j.job_status = #{status}
             </if>
+            <if test="sourceSite != null and sourceSite != ''">
+                AND j.source_site = #{sourceSite}
+            </if>
+            <if test="minSalary != null">
+                AND (j.min_salary &gt;= #{minSalary} OR j.max_salary &gt;= #{minSalary})
+            </if>
+            <if test="maxSalary != null">
+                AND (j.min_salary &lt;= #{maxSalary} OR j.max_salary &lt;= #{maxSalary})
+            </if>
         </where>
         ORDER BY j.publish_time DESC
     </select>
@@ -177,15 +186,12 @@
     </select>
 
     <select id="jobTrendLast7Days" resultType="com.example.recruitment.vo.JobTrendVO">
-        SELECT
-            SUM(CASE WHEN publish_time >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS last7_days,
-            SUM(CASE
-                    WHEN publish_time < DATE_SUB(NOW(), INTERVAL 7 DAY)
-                     AND publish_time >= DATE_SUB(NOW(), INTERVAL 14 DAY)
-                        THEN 1 ELSE 0 END) AS prev7_days
-        FROM job
-        WHERE job_status != 'OFFLINE'
-    </select>
+    SELECT
+        SUM(CASE WHEN publish_time &gt;= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS last7_days,
+        SUM(CASE WHEN publish_time &lt; DATE_SUB(NOW(), INTERVAL 7 DAY) AND publish_time &gt;= DATE_SUB(NOW(), INTERVAL 14 DAY) THEN 1 ELSE 0 END) AS prev7_days
+    FROM job
+    WHERE job_status != 'OFFLINE'
+</select>
 
     <select id="predictSalary" parameterType="map" resultType="java.math.BigDecimal">
         SELECT AVG((min_salary + max_salary) / 2) AS avgSalary

@@ -48,11 +48,10 @@ public interface JobMapper {
 
     List<Job> selectForExport(@Param("limit") Integer limit);
 
-    Job selectByJobKey(@Param("jobKey") String jobKey);
+    Job selectByUniqueKey(@Param("uniqueKey") String uniqueKey);
 
-    int markOfflineByAbsentKeys(@Param("sourceSite") String sourceSite,
-                                @Param("keys") List<String> keys);
+    int markAllInactive();
 
-    int markOfflineWhenNoKeys(@Param("sourceSite") String sourceSite);
+    int activateByUniqueKeys(@Param("keys") List<String> keys);
 }
 

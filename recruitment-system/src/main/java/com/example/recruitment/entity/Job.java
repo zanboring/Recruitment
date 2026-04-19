@@ -1,17 +1,16 @@
 package com.example.recruitment.entity;
 
-import lombok.Data;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@Data
 public class Job {
     private Long id;
     private Long companyId;
     private String title;
     private String companyName;
     private String sourceSite;
+    private String uniqueKey;
+    private Integer status;
     private String jobKey;
     private String jobStatus;
     private String city;
@@ -25,5 +24,41 @@ public class Job {
     private LocalDateTime publishTime;
     private LocalDateTime lastSeenAt;
     private LocalDateTime createdAt;
-}
 
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public Long getCompanyId() { return companyId; }
+    public void setCompanyId(Long companyId) { this.companyId = companyId; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getCompanyName() { return companyName; }
+    public void setCompanyName(String companyName) { this.companyName = companyName; }
+    public String getSourceSite() { return sourceSite; }
+    public void setSourceSite(String sourceSite) { this.sourceSite = sourceSite; }
+    public String getJobKey() { return jobKey; }
+    public void setJobKey(String jobKey) { this.jobKey = jobKey; }
+    public String getJobStatus() { return jobStatus; }
+    public void setJobStatus(String jobStatus) { this.jobStatus = jobStatus; }
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+    public String getExperience() { return experience; }
+    public void setExperience(String experience) { this.experience = experience; }
+    public String getEducation() { return education; }
+    public void setEducation(String education) { this.education = education; }
+    public BigDecimal getMinSalary() { return minSalary; }
+    public void setMinSalary(BigDecimal minSalary) { this.minSalary = minSalary; }
+    public BigDecimal getMaxSalary() { return maxSalary; }
+    public void setMaxSalary(BigDecimal maxSalary) { this.maxSalary = maxSalary; }
+    public String getSalaryUnit() { return salaryUnit; }
+    public void setSalaryUnit(String salaryUnit) { this.salaryUnit = salaryUnit; }
+    public String getSkills() { return skills; }
+    public void setSkills(String skills) { this.skills = skills; }
+    public String getJobDesc() { return jobDesc; }
+    public void setJobDesc(String jobDesc) { this.jobDesc = jobDesc; }
+    public LocalDateTime getPublishTime() { return publishTime; }
+    public void setPublishTime(LocalDateTime publishTime) { this.publishTime = publishTime; }
+    public LocalDateTime getLastSeenAt() { return lastSeenAt; }
+    public void setLastSeenAt(LocalDateTime lastSeenAt) { this.lastSeenAt = lastSeenAt; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+}

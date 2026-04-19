@@ -18,9 +18,23 @@
         SELECT * FROM user WHERE username = #{username}
     </select>
 
+    <select id="selectById" parameterType="long" resultMap="UserResultMap">
+        SELECT * FROM user WHERE id = #{id}
+    </select>
+
     <insert id="insert" parameterType="com.example.recruitment.entity.User" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO user (username, password, salt, role, email, created_at)
         VALUES (#{username}, #{password}, #{salt}, #{role}, #{email}, #{createdAt})
     </insert>
+
+    <update id="update" parameterType="com.example.recruitment.entity.User">
+        UPDATE user
+        <set>
+            <if test="password != null">password = #{password},</if>
+            <if test="salt != null">salt = #{salt},</if>
+            <if test="email != null">email = #{email},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
 </mapper>
 

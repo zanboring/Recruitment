@@ -1,29 +1,58 @@
 server:
   port: 8080
+  servlet:
+    context-path: /
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+    max-connections: 8192
+    accept-count: 100
+    connection-timeout: 20000
 
 spring:
   application:
     name: recruitment-system
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/recruitment_db?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false
+    url: jdbc:mysql://localhost:3306/recruitment_db?useUnicode=true&characterEncoding=utf8&characterSetResults=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: root
     password: 123456
     hikari:
-      # 不在启动阶段就因数据库不可用而直接失败，保证应用可启动
       initializationFailTimeout: 0
-      maximumPoolSize: 10
+      maximumPoolSize: 20
+      minimumIdle: 5
+      connectionTimeout: 30000
+      idleTimeout: 600000
+      maxLifetime: 1800000
+      connectionTestQuery: SELECT 1
+      poolName: RecruitmentHikariCP
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
     serialization:
       WRITE_DATES_AS_TIMESTAMPS: false
+      indent_output: true
+    default-property-inclusion: non_null
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+      enabled: true
 
 mybatis:
   type-aliases-package: com.example.recruitment.entity
   mapper-locations: classpath*:mapper/*.xml
   configuration:
     map-underscore-to-camel-case: true
+    cache-enabled: true
+    lazy-loading-enabled: true
+    aggressive-lazy-loading: false
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 pagehelper:
   helperDialect: mysql
@@ -35,6 +64,17 @@ logging:
   level:
     root: info
     com.example.recruitment: debug
+    org.springframework.web: debug
   file:
     name: logs/recruitment-system.log
+    max-size: 10MB
+    max-history: 30
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+
+# ZhipuAI配置
+zhipuai:
+  api:
+    key: ${ZHIPUAI_API_KEY:your-zhipuai-api-key}
 
