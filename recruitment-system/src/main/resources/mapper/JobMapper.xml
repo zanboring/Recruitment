@@ -20,6 +20,7 @@
         <result column="salary_unit" property="salaryUnit"/>
         <result column="skills" property="skills"/>
         <result column="job_desc" property="jobDesc"/>
+        <result column="url" property="url"/>
         <result column="publish_time" property="publishTime"/>
         <result column="last_seen_at" property="lastSeenAt"/>
         <result column="created_at" property="createdAt"/>
@@ -28,10 +29,10 @@
     <insert id="insert" parameterType="com.example.recruitment.entity.Job" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO job
         (company_id, title, company_name, source_site, job_key, job_status, city, experience, education,
-         min_salary, max_salary, salary_unit, skills, job_desc, publish_time, last_seen_at, created_at)
+         min_salary, max_salary, salary_unit, skills, job_desc, url, publish_time, last_seen_at, created_at)
         VALUES
         (#{companyId}, #{title}, #{companyName}, #{sourceSite}, #{jobKey}, #{jobStatus}, #{city}, #{experience}, #{education},
-         #{minSalary}, #{maxSalary}, #{salaryUnit}, #{skills}, #{jobDesc}, #{publishTime}, #{lastSeenAt}, #{createdAt})
+         #{minSalary}, #{maxSalary}, #{salaryUnit}, #{skills}, #{jobDesc}, #{url}, #{publishTime}, #{lastSeenAt}, #{createdAt})
     </insert>
 
     <update id="update" parameterType="com.example.recruitment.entity.Job">
@@ -51,14 +52,20 @@
             <if test="salaryUnit != null">salary_unit = #{salaryUnit},</if>
             <if test="skills != null">skills = #{skills},</if>
             <if test="jobDesc != null">job_desc = #{jobDesc},</if>
+            <if test="url != null">url = #{url},</if>
             <if test="publishTime != null">publish_time = #{publishTime},</if>
             <if test="lastSeenAt != null">last_seen_at = #{lastSeenAt},</if>
+            <if test="createdAt != null">created_at = #{createdAt},</if>
         </set>
         WHERE id = #{id}
     </update>
 
     <delete id="deleteById" parameterType="long">
         DELETE FROM job WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteAll">
+        DELETE FROM job
     </delete>
 
     <select id="selectById" parameterType="long" resultMap="JobResultMap">
@@ -241,5 +248,16 @@
         WHERE source_site = #{sourceSite}
           AND job_status != 'OFFLINE'
     </update>
+
+    <select id="selectAll" resultMap="JobResultMap">
+        SELECT * FROM job
+    </select>
+
+    <select id="selectRecentJobs" parameterType="int" resultMap="JobResultMap">
+        SELECT * FROM job
+        WHERE job_status != 'OFFLINE'
+        AND created_at >= DATE_SUB(NOW(), INTERVAL #{days} DAY)
+        ORDER BY created_at DESC
+    </select>
 </mapper>
 

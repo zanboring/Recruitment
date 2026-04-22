@@ -19,6 +19,8 @@ public interface JobMapper {
 
     int deleteById(Long id);
 
+    int deleteAll();
+
     Job selectById(Long id);
 
     List<Job> selectByCondition(JobQueryDTO dto);
@@ -48,10 +50,20 @@ public interface JobMapper {
 
     List<Job> selectForExport(@Param("limit") Integer limit);
 
+    Job selectByJobKey(@Param("jobKey") String jobKey);
+
+    int markOfflineWhenNoKeys(@Param("sourceSite") String sourceSite);
+
+    int markOfflineByAbsentKeys(@Param("sourceSite") String sourceSite, @Param("keys") List<String> keys);
+
     Job selectByUniqueKey(@Param("uniqueKey") String uniqueKey);
 
     int markAllInactive();
 
     int activateByUniqueKeys(@Param("keys") List<String> keys);
+
+    List<Job> selectAll();
+
+    List<Job> selectRecentJobs(@Param("days") int days);
 }
 

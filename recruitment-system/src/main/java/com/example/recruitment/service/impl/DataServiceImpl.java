@@ -4,6 +4,7 @@ import com.alibaba.excel.EasyExcel;
 import com.example.recruitment.dto.JobExcelRow;
 import com.example.recruitment.entity.Job;
 import com.example.recruitment.exception.BusinessException;
+import com.example.recruitment.mapper.CrawlTaskMapper;
 import com.example.recruitment.mapper.JobMapper;
 import com.example.recruitment.service.DataService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -27,6 +27,7 @@ import java.util.List;
 public class DataServiceImpl implements DataService {
 
     private final JobMapper jobMapper;
+    private final CrawlTaskMapper crawlTaskMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -129,6 +130,15 @@ public class DataServiceImpl implements DataService {
             log.error("Excel导出失败: {}", e.getMessage(), e);
             throw new BusinessException("Excel 导出失败：" + e.getMessage());
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int cleanupAllData() {
+        int deletedJobs = jobMapper.deleteAll();
+        int deletedTasks = crawlTaskMapper.deleteAll();
+        log.info("数据清洗完成: 删除岗位{}条, 删除任务{}条", deletedJobs, deletedTasks);
+        return deletedJobs;
     }
 
     private LocalDateTime parsePublishTime(String publishTime) {

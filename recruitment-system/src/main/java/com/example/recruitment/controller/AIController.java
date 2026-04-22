@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,10 +16,14 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Slf4j
 @RestController
@@ -27,8 +32,10 @@ import java.util.concurrent.Executors;
 @Tag(name = "AI分析", description = "AI大模型问答接口")
 public class AIController {
 
-    private String apiKey = "24ae1066698a45b2b773c6de7736b1f6.yvZYqoEYIOSHHesi";
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    @Value("${zhipuai.api.key:}")
+    private String apiKey;
+    private final ExecutorService executor = Executors.newFixedThreadPool(10);
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping("/chat")
     @Operation(summary = "AI聊天", description = "通过ZhipuAI进行智能问答")
@@ -44,7 +51,7 @@ public class AIController {
         }
     }
 
-    @RequestMapping("/stream")
+    @PostMapping("/stream")
     @Operation(summary = "AI流式聊天", description = "通过ZhipuAI进行流式智能问答")
     public SseEmitter streamChat(@RequestBody AIChatRequest request) {
         SseEmitter emitter = new SseEmitter(120000L);
@@ -64,9 +71,12 @@ public class AIController {
     }
 
     private String callZhipuAI(String message) throws Exception {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("未配置智谱AI API Key，请设置 zhipuai.api.key 或环境变量 ZHIPUAI_API_KEY");
+        }
         String url = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
         connection.setRequestProperty("Authorization", "Bearer " + apiKey);
@@ -75,12 +85,7 @@ public class AIController {
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(45000);
 
-        String requestBody = "{" +
-                "\"model\": \"glm-4\"," +
-                "\"messages\": [" +
-                "{\"role\": \"user\", \"content\": \"" + message + "\"}" +
-                "]" +
-                "}";
+        String requestBody = buildRequestBody(message, false);
 
         log.info("API请求URL: {}", url);
         log.info("API请求体: {}", requestBody);
@@ -115,9 +120,12 @@ public class AIController {
     }
 
     private void callZhipuAIStream(String message, SseEmitter emitter) throws Exception {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("未配置智谱AI API Key，请设置 zhipuai.api.key 或环境变量 ZHIPUAI_API_KEY");
+        }
         String url = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
         connection.setRequestProperty("Authorization", "Bearer " + apiKey);
@@ -126,13 +134,7 @@ public class AIController {
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(120000);
 
-        String requestBody = "{" +
-                "\"model\": \"glm-4\"," +
-                "\"messages\": [" +
-                "{\"role\": \"user\", \"content\": \"" + message + "\"}" +
-                "]," +
-                "\"stream\": true" +
-                "}";
+        String requestBody = buildRequestBody(message, true);
 
         log.info("流式API请求URL: {}", url);
 
@@ -142,6 +144,17 @@ public class AIController {
 
         int responseCode = connection.getResponseCode();
         log.info("流式API响应码: {}", responseCode);
+        if (responseCode != HttpURLConnection.HTTP_OK) {
+            StringBuilder errorResponse = new StringBuilder();
+            try (BufferedReader errorReader = new BufferedReader(
+                    new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = errorReader.readLine()) != null) {
+                    errorResponse.append(line);
+                }
+            }
+            throw new Exception("流式API调用失败: " + responseCode + ", " + errorResponse);
+        }
 
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
@@ -170,6 +183,16 @@ public class AIController {
             log.error("读取流式响应失败", e);
             throw e;
         }
+    }
+
+    private String buildRequestBody(String message, boolean stream) throws Exception {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("model", "glm-4");
+        payload.put("messages", List.of(Map.of("role", "user", "content", message)));
+        if (stream) {
+            payload.put("stream", true);
+        }
+        return objectMapper.writeValueAsString(payload);
     }
 
     private String extractContentFromStreamData(String data) {

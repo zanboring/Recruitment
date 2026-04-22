@@ -41,5 +41,14 @@ public class DataController {
         dataService.exportJobs(response, limit);
         log.info("数据导出成功");
     }
+
+    @PostMapping("/cleanup")
+    @Operation(summary = "清洗数据库", description = "清空岗位数据与爬虫任务数据")
+    public Result<Integer> cleanupAllData() {
+        log.warn("执行数据库清洗请求");
+        int deletedJobs = dataService.cleanupAllData();
+        log.warn("数据库清洗完成: 删除岗位{}条", deletedJobs);
+        return Result.success(deletedJobs);
+    }
 }
 

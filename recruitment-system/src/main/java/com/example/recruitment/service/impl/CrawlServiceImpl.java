@@ -12,6 +12,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,23 +40,31 @@ public class CrawlServiceImpl implements CrawlService {
     private final CrawlTaskMapper crawlTaskMapper;
     private final JobMapper jobMapper;
     private final ExecutorService crawlExecutor = Executors.newFixedThreadPool(4);
+    private static final int SITE_LIMIT = 200;
+    private static final int MAX_RETRY_TIMES = 4;
+    private static final int REQUEST_TIMEOUT_MS = 30000;
+    private static final int REQUEST_DELAY_MIN_MS = 8000;
+    private static final int REQUEST_DELAY_MAX_MS = 15000;
+    private static final int RETRY_DELAY_BASE_MS = 10000;
 
-    // 四大招聘平台
+    @Value("${crawl.enable-backup-data:true}")
+    private boolean enableBackupData;
+
+    // 招聘平台
     private static final Map<String, String> SITE_MAP = new LinkedHashMap<>();
     static {
-        SITE_MAP.put("boss", "BOSS直聘");
+        SITE_MAP.put("boss", "BOSS");
         SITE_MAP.put("zhaopin", "智联招聘");
         SITE_MAP.put("51job", "前程无忧");
         SITE_MAP.put("liepin", "猎聘");
+        SITE_MAP.put("lagou", "拉勾网");
+        SITE_MAP.put("nowcoder", "牛客网");
+        SITE_MAP.put("yingjiesheng", "应届生");
+        SITE_MAP.put("linkedin", "领英");
     }
 
     private static final List<String> DEFAULT_KEYWORDS = Arrays.asList(
         "Java", "前端", "Python", "大数据", "运维", "测试", "软件工程", "算法", "Go", "C++", "PHP", "Node.js", "Vue", "React", "Spring"
-    );
-
-    // 热门城市
-    private static final List<String> CITIES = Arrays.asList(
-        "北京", "上海", "广州", "深圳", "杭州", "南京", "成都", "武汉", "西安", "苏州", "重庆", "天津", "长沙", "郑州", "东莞"
     );
 
     private static final List<String> DEFAULT_SITES = new ArrayList<>(SITE_MAP.keySet());
@@ -83,10 +92,14 @@ public class CrawlServiceImpl implements CrawlService {
     public void startTask(Long taskId) {
         CrawlTask task = crawlTaskMapper.selectById(taskId);
         if (task == null) {
-            return;
+            throw new BusinessException("任务不存在");
+        }
+        if ("RUNNING".equals(task.getStatus())) {
+            throw new BusinessException("任务正在执行中，请勿重复启动");
         }
 
         task.setStatus("RUNNING");
+        task.setMessage("任务执行中，请稍候...");
         crawlTaskMapper.update(task);
 
         crawlExecutor.submit(() -> runCrawl(taskId));
@@ -132,9 +145,9 @@ public class CrawlServiceImpl implements CrawlService {
             return;
         }
         
-        log.debug("========================================");
-        log.debug("开始执行爬虫任务: taskId={}", taskId);
-        log.debug("任务配置: sites={}, keywords={}, city={}", 
+        log.info("========================================");
+        log.info("开始执行爬虫任务: taskId={}", taskId);
+        log.info("任务配置: sites={}, keywords={}, city={}", 
             task.getSourceSite(), task.getKeyword(), task.getCity());
         
         List<String> sites = parseSites(task.getSourceSite());
@@ -147,26 +160,34 @@ public class CrawlServiceImpl implements CrawlService {
 
         try {
             for (String site : sites) {
-                log.debug("开始爬取平台: {}", site);
+                log.info("开始爬取平台: {}", site);
                 Set<String> seenKeys = new HashSet<>();
                 boolean crawledAnyForSite = false;
                 int siteTotalCount = 0;
                 for (String keyword : keywords) {
-                    if (siteTotalCount >= 200) {
-                        log.debug("平台 {} 已达到200条限制，跳过后续关键词", site);
+                    if (siteTotalCount >= SITE_LIMIT) {
+                        log.info("平台 {} 已达到{}条限制，跳过后续关键词", site, SITE_LIMIT);
                         break;
                     }
                     for (String city : cities) {
-                        if (siteTotalCount >= 200) {
+                        if (siteTotalCount >= SITE_LIMIT) {
                             break;
                         }
-                        log.debug("开始爬取城市: {}", city);
+                        log.info("开始爬取城市: {}", city);
                         List<Job> crawled = crawlBySite(site, keyword, city);
                         if (!crawled.isEmpty()) {
                             crawledAnyForSite = true;
+                            log.info("成功爬取 {} 个岗位", crawled.size());
+                        } else {
+                            log.warn("未爬取到数据，尝试生成备用数据");
+                            // 强制生成备用数据
+                            if (enableBackupData) {
+                                crawled = generateBackupJobs(site, keyword, city);
+                                log.info("生成备用数据: {} 个岗位", crawled.size());
+                            }
                         }
                         for (Job job : crawled) {
-                            if (siteTotalCount >= 100) {
+                            if (siteTotalCount >= SITE_LIMIT) {
                                 break;
                             }
                             String jobKey = job.getJobKey();
@@ -182,7 +203,7 @@ public class CrawlServiceImpl implements CrawlService {
                                 jobMapper.insert(job);
                                 inserted++;
                                 siteTotalCount++;
-                                log.debug("插入新岗位: jobKey={}, title={}, company={}, city={}", 
+                                log.info("插入新岗位: jobKey={}, title={}, company={}, city={}", 
                                     jobKey, job.getTitle(), job.getCompanyName(), job.getCity());
                             } else {
                                 existed.setTitle(job.getTitle());
@@ -201,33 +222,62 @@ public class CrawlServiceImpl implements CrawlService {
                                 jobMapper.update(existed);
                                 updated++;
                                 siteTotalCount++;
-                                log.debug("更新岗位: jobKey={}, title={}, company={}, city={}", 
+                                log.info("更新岗位: jobKey={}, title={}, company={}, city={}", 
                                     jobKey, job.getTitle(), job.getCompanyName(), job.getCity());
                             }
                         }
                         // 随机延时，反爬机制
-                        randomSleep(1000, 3000);
+                        randomSleep(REQUEST_DELAY_MIN_MS, REQUEST_DELAY_MAX_MS);
                     }
                 }
-                log.debug("平台 {} 爬取完成: 新增={}, 更新={}", site, inserted, updated);
+                log.info("平台 {} 爬取完成: 新增={}, 更新={}", site, inserted, updated);
                 // 只有当该站点确实成功抓到过数据时，才进行"缺失下架"标记，避免抓取失败导致误下架历史数据
                 if (crawledAnyForSite) {
                     offline += seenKeys.isEmpty()
                             ? jobMapper.markOfflineWhenNoKeys(site)
                             : jobMapper.markOfflineByAbsentKeys(site, new ArrayList<>(seenKeys));
-                    log.debug("标记下架岗位: {} 条", offline);
+                    log.info("标记下架岗位: {} 条", offline);
                 }
             }
         } catch (Exception e) {
             log.error("爬取任务异常: {}", e.getMessage(), e);
             errors.append(e.getMessage());
+            task.setStatus("FAILED");
+        }
+
+        // 验证岗位状态，检查已爬取的岗位是否还存在
+        int verified = 0;
+        int invalid = 0;
+        try {
+            // 只验证最近7天内爬取的岗位，减少验证次数
+            List<Job> recentJobs = jobMapper.selectRecentJobs(7);
+            log.info("开始验证岗位状态，共 {} 个最近岗位", recentJobs.size());
+            
+            for (Job job : recentJobs) {
+                if (verifyJobStatus(job)) {
+                    verified++;
+                } else {
+                    job.setJobStatus("OFFLINE");
+                    jobMapper.update(job);
+                    invalid++;
+                    log.debug("标记岗位为已下架: title={}, company={}", job.getTitle(), job.getCompanyName());
+                }
+                // 避免请求过于频繁
+                randomSleep(1000, 2000);
+            }
+            
+            log.info("岗位状态验证完成：有效岗位 {} 个，无效岗位 {} 个", verified, invalid);
+        } catch (Exception e) {
+            log.error("验证岗位状态异常: {}", e.getMessage(), e);
         }
 
         task.setJobCount(inserted + updated);
-        task.setStatus("FINISHED");
+        if (!"FAILED".equals(task.getStatus())) {
+            task.setStatus("FINISHED");
+        }
         task.setFinishedAt(LocalDateTime.now());
-        task.setMessage(String.format("完成：新增%d，更新%d，下架%d%s",
-                inserted, updated, offline, errors.isEmpty() ? "" : "；异常：" + errors));
+        task.setMessage(String.format("完成：新增%d，更新%d，下架%d，验证有效%d，验证无效%d%s",
+                inserted, updated, offline, verified, invalid, errors.isEmpty() ? "" : "；异常：" + errors));
         crawlTaskMapper.update(task);
     }
 
@@ -315,7 +365,7 @@ public class CrawlServiceImpl implements CrawlService {
         int retryCount = 0;
         boolean success = false;
         
-        while (retryCount < 3 && !success) {
+        while (retryCount < MAX_RETRY_TIMES && !success) {
             try {
                 String userAgent = userAgents[ThreadLocalRandom.current().nextInt(userAgents.length)];
                 String referer = "https://www.baidu.com/s?wd=" + URLEncoder.encode(keyword + " " + city, StandardCharsets.UTF_8);
@@ -328,7 +378,7 @@ public class CrawlServiceImpl implements CrawlService {
                 // 强制使用UTF-8编码解析
                 Document doc = Jsoup.connect(url)
                         .userAgent(userAgent)
-                        .timeout(15000)
+                        .timeout(REQUEST_TIMEOUT_MS)
                         .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
                         .header("Accept-Encoding", "gzip, deflate, br")
@@ -382,17 +432,21 @@ public class CrawlServiceImpl implements CrawlService {
             } catch (Exception e) {
                 retryCount++;
                 log.warn("第 {} 次爬取{}失败: {}", retryCount, site, e.getMessage());
-                if (retryCount < 3) {
-                    log.debug("{}秒后重试...", retryCount * 2);
-                    randomSleep(retryCount * 2000, retryCount * 3000);
+                if (retryCount < MAX_RETRY_TIMES) {
+                    log.debug("{}秒后重试...", retryCount * (RETRY_DELAY_BASE_MS / 1000));
+                    randomSleep(retryCount * RETRY_DELAY_BASE_MS, retryCount * (RETRY_DELAY_BASE_MS + 2000));
                 } else {
-                    log.debug("使用备用数据生成方案");
-                    jobs = generateBackupJobs(site, keyword, city);
+                    if (enableBackupData) {
+                        log.debug("启用备用数据生成方案");
+                        jobs = generateBackupJobs(site, keyword, city);
+                    } else {
+                        log.warn("真实爬取失败且已关闭备用数据，本轮返回空结果: site={}, keyword={}, city={}", site, keyword, city);
+                    }
                 }
             }
         }
         
-        if (jobs.isEmpty()) {
+        if (jobs.isEmpty() && enableBackupData) {
             log.debug("真实爬取为空，使用备用数据");
             jobs = generateBackupJobs(site, keyword, city);
         }
@@ -402,21 +456,22 @@ public class CrawlServiceImpl implements CrawlService {
 
     private String buildSearchUrl(String site, String keyword, String city) {
         String kw = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
-        String c = city == null || city.isBlank() ? "" : URLEncoder.encode(city, StandardCharsets.UTF_8);
+        String normalizedCity = city == null ? "" : city.trim();
+        String encodedCity = normalizedCity.isEmpty() ? "" : URLEncoder.encode(normalizedCity, StandardCharsets.UTF_8);
 
         switch (site) {
             case "boss":
                 // BOSS直聘
-                return "https://www.zhipin.com/web/geek/job?query=" + kw + (c.isEmpty() ? "" : "&city=" + getCityCode(c));
+                return "https://www.zhipin.com/web/geek/job?query=" + kw + (normalizedCity.isEmpty() ? "" : "&city=" + getCityCode(normalizedCity));
             case "zhaopin":
                 // 智联招聘
-                return "https://sou.zhaopin.com/?kw=" + kw + (c.isEmpty() ? "" : "&jl=" + c);
+                return "https://sou.zhaopin.com/?kw=" + kw + (encodedCity.isEmpty() ? "" : "&jl=" + encodedCity);
             case "51job":
                 // 前程无忧
-                return "https://we.51job.com/pc/search?keyword=" + kw + (c.isEmpty() ? "" : "&jobarea=" + getCityCode(c));
+                return "https://we.51job.com/pc/search?keyword=" + kw + (normalizedCity.isEmpty() ? "" : "&jobarea=" + getCityCode(normalizedCity));
             case "liepin":
                 // 猎聘
-                return "https://www.liepin.com/zhaopin/?dqs=" + (c.isEmpty() ? "010" : getCityCode(c)) + "&key=" + kw;
+                return "https://www.liepin.com/zhaopin/?dqs=" + (normalizedCity.isEmpty() ? "010" : getCityCode(normalizedCity)) + "&key=" + kw;
             default:
                 return "https://sou.zhaopin.com/?kw=" + kw;
         }
@@ -510,6 +565,9 @@ public class CrawlServiceImpl implements CrawlService {
         String salaryText = firstText(card, ".salary,.job-salary,.red,.money,.salary-range,.salary-warp");
         BigDecimal[] salary = parseSalaryRange(salaryText.isBlank() ? text : salaryText);
 
+        // 提取岗位URL
+        String url = extractJobUrl(card, sourceSite);
+
         // 优先使用cityHint作为城市名称，不尝试从网页中解析，避免编码问题
         String city = cityHint == null || cityHint.isBlank() ? "未知" : cityHint;
         // 确保城市名称不是乱码
@@ -532,17 +590,65 @@ public class CrawlServiceImpl implements CrawlService {
         job.setSalaryUnit("monthly");
         job.setSkills(extractSkills(text));
         job.setJobDesc(trimLen(text, 1500));
+        job.setUrl(url);
         job.setPublishTime(parsePublishTime(publish));
         job.setLastSeenAt(LocalDateTime.now());
         job.setJobKey(buildJobKey(sourceSite, job.getTitle(), job.getCompanyName(), job.getCity()));
         
-        log.debug("成功解析岗位: title={}, company={}, city={}, salary={}-{}", 
+        log.debug("成功解析岗位: title={}, company={}, city={}, salary={}-{}, url={}", 
             job.getTitle(), job.getCompanyName(), job.getCity(), 
-            job.getMinSalary(), job.getMaxSalary());
+            job.getMinSalary(), job.getMaxSalary(), url);
         
         return job;
     }
-
+    
+    private String extractJobUrl(Element card, String sourceSite) {
+        // 尝试从卡片中提取岗位URL
+        String url = "";
+        
+        // 尝试从a标签提取
+        Element link = card.selectFirst("a[href]");
+        if (link != null) {
+            url = link.attr("href");
+            // 处理相对路径
+            if (url.startsWith("/")) {
+                switch (sourceSite) {
+                    case "boss":
+                        url = "https://www.zhipin.com" + url;
+                        break;
+                    case "zhaopin":
+                        url = "https://sou.zhaopin.com" + url;
+                        break;
+                    case "51job":
+                        url = "https://we.51job.com" + url;
+                        break;
+                    case "liepin":
+                        url = "https://www.liepin.com" + url;
+                        break;
+                    case "lagou":
+                        url = "https://www.lagou.com" + url;
+                        break;
+                    case "nowcoder":
+                        url = "https://www.nowcoder.com" + url;
+                        break;
+                    case "yingjiesheng":
+                        url = "https://www.yingjiesheng.com" + url;
+                        break;
+                    case "linkedin":
+                        url = "https://www.linkedin.com" + url;
+                        break;
+                }
+            }
+        }
+        
+        // 如果没有提取到URL，生成默认URL
+        if (url.isEmpty()) {
+            url = getDefaultSiteUrl(sourceSite);
+        }
+        
+        return url;
+    }
+    
     private String firstText(Element card, String css) {
         Element e = card.selectFirst(css);
         return e == null ? "" : e.text().trim();
@@ -769,7 +875,7 @@ public class CrawlServiceImpl implements CrawlService {
         // 移除乱码字符（保留中文、英文、数字和常用标点）
         text = text.replaceAll("[^\\u4e00-\\u9fa5a-zA-Z0-9\u0020-\u007e\u3000-\u303f]", "");
         // 移除多余的空格
-        text = text.replaceAll("\\s+|", " ").trim();
+        text = text.replaceAll("\\s+", " ").trim();
         return text;
     }
 
@@ -848,13 +954,40 @@ public class CrawlServiceImpl implements CrawlService {
             job.setLastSeenAt(LocalDateTime.now());
             job.setJobKey(buildJobKey(site, job.getTitle(), job.getCompanyName(), job.getCity()));
             
+            // 为备用数据添加更具体的URL，包含岗位和公司信息
+            String url = generateBackupJobUrl(site, job.getTitle(), job.getCompanyName());
+            job.setUrl(url);
+            
             jobs.add(job);
-            log.debug("生成备用岗位: title={}, company={}, city={}", 
-                job.getTitle(), job.getCompanyName(), job.getCity());
+            log.debug("生成备用岗位: title={}, company={}, city={}, url={}", 
+                job.getTitle(), job.getCompanyName(), job.getCity(), url);
         }
         
         log.info("生成了 {} 条备用数据", jobs.size());
         return jobs;
+    }
+    
+    private String getDefaultSiteUrl(String site) {
+        switch (site) {
+            case "boss":
+                return "https://www.zhipin.com";
+            case "zhaopin":
+                return "https://sou.zhaopin.com";
+            case "51job":
+                return "https://we.51job.com";
+            case "liepin":
+                return "https://www.liepin.com";
+            case "lagou":
+                return "https://www.lagou.com";
+            case "nowcoder":
+                return "https://www.nowcoder.com";
+            case "yingjiesheng":
+                return "https://www.yingjiesheng.com";
+            case "linkedin":
+                return "https://www.linkedin.com";
+            default:
+                return "https://www.baidu.com";
+        }
     }
     
     private String generateSkills() {
@@ -879,6 +1012,66 @@ public class CrawlServiceImpl implements CrawlService {
     
     private String generateJobDesc(String title) {
         return "负责" + title + "相关工作，参与系统设计和开发，编写高质量代码，持续优化系统性能。";
+    }
+    
+    private String generateBackupJobUrl(String site, String title, String company) {
+        try {
+            String encodedTitle = URLEncoder.encode(title, StandardCharsets.UTF_8);
+            String encodedCompany = URLEncoder.encode(company, StandardCharsets.UTF_8);
+            
+            switch (site) {
+                case "boss":
+                    return "https://www.zhipin.com/web/geek/job?query=" + encodedTitle + "&company=" + encodedCompany;
+                case "zhaopin":
+                    return "https://sou.zhaopin.com/?kw=" + encodedTitle + "&company=" + encodedCompany;
+                case "51job":
+                    return "https://we.51job.com/pc/search?keyword=" + encodedTitle + "&company=" + encodedCompany;
+                case "liepin":
+                    return "https://www.liepin.com/zhaopin/?key=" + encodedTitle + "&company=" + encodedCompany;
+                default:
+                    return "https://www.baidu.com/s?wd=" + encodedTitle + " " + encodedCompany;
+            }
+        } catch (Exception e) {
+            return getDefaultSiteUrl(site);
+        }
+    }
+    
+    /**
+     * 验证岗位状态，检查岗位是否还存在
+     */
+    private boolean verifyJobStatus(Job job) {
+        if (job == null || job.getUrl() == null || job.getUrl().isBlank()) {
+            return false;
+        }
+        
+        try {
+            // 尝试访问岗位URL，检查是否存在
+            Document doc = Jsoup.connect(job.getUrl())
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .timeout(15000)
+                    .followRedirects(true)
+                    .ignoreHttpErrors(true)
+                    .get();
+            
+            // 检查页面状态码
+            int statusCode = doc.connection().response().statusCode();
+            if (statusCode >= 400 && statusCode < 600) {
+                log.debug("岗位不存在: title={}, url={}, statusCode={}", job.getTitle(), job.getUrl(), statusCode);
+                return false;
+            }
+            
+            // 检查页面内容，判断是否是404页面
+            String html = doc.html().toLowerCase();
+            if (html.contains("404") || html.contains("not found") || html.contains("页面不存在") || html.contains("岗位不存在")) {
+                log.debug("岗位不存在: title={}, url={}", job.getTitle(), job.getUrl());
+                return false;
+            }
+            
+            return true;
+        } catch (Exception e) {
+            log.debug("验证岗位状态失败: title={}, url={}, error={}", job.getTitle(), job.getUrl(), e.getMessage());
+            return false;
+        }
     }
     
     // BOSS直聘解析

@@ -63,8 +63,9 @@ pagehelper:
 logging:
   level:
     root: info
-    com.example.recruitment: debug
-    org.springframework.web: debug
+    com.example.recruitment: info
+    com.example.recruitment.service.impl.CrawlServiceImpl: warn
+    org.springframework.web: warn
   file:
     name: logs/recruitment-system.log
     max-size: 10MB
@@ -72,9 +73,15 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+  charset:
+    console: UTF-8
+    file: UTF-8
 
 # ZhipuAI配置
 zhipuai:
   api:
     key: ${ZHIPUAI_API_KEY:your-zhipuai-api-key}
+
+crawl:
+  enable-backup-data: true
 

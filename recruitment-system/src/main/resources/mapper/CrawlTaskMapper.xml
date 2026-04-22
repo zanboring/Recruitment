@@ -48,5 +48,9 @@
         DELETE FROM crawl_task WHERE id = #{id}
     </delete>
 
+    <delete id="deleteAll">
+        DELETE FROM crawl_task
+    </delete>
+
 </mapper>
 

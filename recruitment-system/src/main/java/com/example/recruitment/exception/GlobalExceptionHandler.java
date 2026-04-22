@@ -3,6 +3,7 @@ package com.example.recruitment.exception;
 import com.example.recruitment.common.Result;
 import com.example.recruitment.common.ResultCode;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -17,8 +18,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public Result<Void> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
-        String msg = e.getBindingResult().getFieldError() != null
-                ? e.getBindingResult().getFieldError().getDefaultMessage()
+        FieldError fieldError = e.getBindingResult().getFieldError();
+        String msg = fieldError != null
+                ? fieldError.getDefaultMessage()
                 : "参数校验失败";
         return Result.validateFailed(msg);
     }

@@ -29,6 +29,11 @@
               导出招聘数据
             </el-button>
 
+            <el-button type="danger" plain size="large" @click="cleanupDatabase" :loading="cleaningData">
+              <el-icon><Delete /></el-icon>
+              清洗数据库
+            </el-button>
+
             <el-button type="primary" size="large" @click="startQuickCrawl" :loading="quickCrawling" :disabled="quickCrawling">
               <el-icon><Connection /></el-icon>
               一键实时爬取
@@ -43,6 +48,78 @@
               <el-icon><Refresh /></el-icon>
               刷新数据
             </el-button>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 数据统计卡片 -->
+    <el-row :gutter="20" style="margin-top: 20px">
+      <el-col :span="6">
+        <el-card class="stat-card" shadow="hover">
+          <div class="stat-content">
+            <div class="stat-icon">
+              <el-icon><DataAnalysis /></el-icon>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ totalJobs }}</div>
+              <div class="stat-label">总岗位数</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card class="stat-card" shadow="hover">
+          <div class="stat-content">
+            <div class="stat-icon">
+              <el-icon><Success /></el-icon>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ activeJobs }}</div>
+              <div class="stat-label">有效岗位</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card class="stat-card" shadow="hover">
+          <div class="stat-content">
+            <div class="stat-icon">
+              <el-icon><Warning /></el-icon>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ offlineJobs }}</div>
+              <div class="stat-label">已下架</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card class="stat-card" shadow="hover">
+          <div class="stat-content">
+            <div class="stat-icon">
+              <el-icon><Timer /></el-icon>
+            </div>
+            <div class="stat-info">
+              <div class="stat-value">{{ totalTasks }}</div>
+              <div class="stat-label">爬取任务</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 爬取进度条 -->
+    <el-row :gutter="20" style="margin-top: 20px" v-if="quickCrawling">
+      <el-col :span="24">
+        <el-card class="progress-card" shadow="never">
+          <div class="progress-header">
+            <el-icon><Loading /></el-icon>
+            <span>爬取进度</span>
+          </div>
+          <el-progress :percentage="crawlProgress" :status="crawlProgress === 100 ? 'success' : 'warning'" />
+          <div class="progress-info">
+            <span>当前状态: {{ crawlStatus }}</span>
           </div>
         </el-card>
       </el-col>
@@ -256,7 +333,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   FolderOpened,
@@ -275,6 +352,7 @@ import http from '@/api/http';
 const loading = ref(false);
 const previewLoading = ref(false);
 const creatingTask = ref(false);
+const cleaningData = ref(false);
 const quickCrawling = ref(false);
 const tasks = ref<any[]>([]);
 const previewData = ref<any[]>([]);
@@ -283,6 +361,14 @@ const showLogDialog = ref(false);
 const currentTask = ref<any>(null);
 const crawlLogs = ref<any[]>([]);
 const logContentRef = ref<HTMLElement | null>(null);
+const quickTaskIds = ref<number[]>([]);
+const quickPollTimer = ref<number | null>(null);
+const totalJobs = ref(0);
+const activeJobs = ref(0);
+const offlineJobs = ref(0);
+const totalTasks = ref(0);
+const crawlProgress = ref(0);
+const crawlStatus = ref('准备中');
 
 const cityOptions = [
   { label: '北京', value: '北京' },
@@ -301,7 +387,7 @@ const cityOptions = [
 const crawlForm = reactive({
   sourceSite: '',
   keyword: '',
-  cities: []
+  cities: [] as string[]
 });
 
 const previewQuery = reactive({
@@ -312,11 +398,43 @@ const loadData = async () => {
   loading.value = true;
   try {
     const res = await http.get('/crawl/tasks');
-    tasks.value = res || [];
+    tasks.value = res.data || [];
+    totalTasks.value = tasks.value.length;
+    
+    // 加载岗位统计数据
+    await loadJobStats();
   } catch (error) {
     ElMessage.error('加载任务列表失败');
   } finally {
     loading.value = false;
+  }
+};
+
+const loadJobStats = async () => {
+  try {
+    const res = await http.post('/jobs/page', {
+      pageNum: 1,
+      pageSize: 1
+    });
+    totalJobs.value = res.data?.total || 0;
+    
+    // 加载有效岗位数
+    const activeRes = await http.post('/jobs/page', {
+      pageNum: 1,
+      pageSize: 1,
+      status: 'ACTIVE'
+    });
+    activeJobs.value = activeRes.data?.total || 0;
+    
+    // 加载已下架岗位数
+    const offlineRes = await http.post('/jobs/page', {
+      pageNum: 1,
+      pageSize: 1,
+      status: 'OFFLINE'
+    });
+    offlineJobs.value = offlineRes.data?.total || 0;
+  } catch (error) {
+    console.error('加载岗位统计失败:', error);
   }
 };
 
@@ -328,7 +446,7 @@ const loadPreviewData = async () => {
       pageNum: 1,
       pageSize: 10
     });
-    previewData.value = res?.list || [];
+    previewData.value = res.data?.list || [];
   } catch (error) {
     ElMessage.error('加载数据预览失败');
   } finally {
@@ -357,7 +475,7 @@ const handleFileChange = (file: any) => {
 const onExport = async () => {
   try {
     const res = await http.get('/data/export', { responseType: 'blob' } as any);
-    const blob = res as any as Blob;
+    const blob = res.data as Blob;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -367,6 +485,34 @@ const onExport = async () => {
     ElMessage.success('导出成功');
   } catch (error) {
     ElMessage.error('导出失败');
+  }
+};
+
+const cleanupDatabase = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '该操作会清空岗位数据和爬虫任务记录，是否继续？',
+      '清洗数据库确认',
+      {
+        confirmButtonText: '确定清洗',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+
+    cleaningData.value = true;
+    const deletedCount = await http.post('/data/cleanup');
+    ElMessage.success(`清洗完成，已删除 ${deletedCount || 0} 条岗位数据`);
+    crawlLogs.value = [];
+    quickTaskIds.value = [];
+    await loadData();
+    await loadPreviewData();
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error('数据库清洗失败');
+    }
+  } finally {
+    cleaningData.value = false;
   }
 };
 
@@ -417,8 +563,12 @@ const startTask = async (id: number) => {
 };
 
 const startQuickCrawl = async () => {
+  stopQuickPolling();
   quickCrawling.value = true;
   crawlLogs.value = [];
+  quickTaskIds.value = [];
+  crawlProgress.value = 0;
+  crawlStatus.value = '准备中';
   
   const defaultCities = ['长沙'];
   const keywords = ['Java后端', '运维', '软件测试', 'Python开发', '计算机相关', '应届生', '校招', '25届', '26届', '无经验', '0-1年', '1-3年', '实习'];
@@ -426,25 +576,30 @@ const startQuickCrawl = async () => {
   addLog('info', '========================================');
   addLog('info', '开始一键实时爬取所有平台');
   addLog('info', `目标城市：${defaultCities.join('、')}`);
-  addLog('info', '目标平台：BOSS直聘、智联招聘、前程无忧、猎聘');
+  addLog('info', '目标平台：BOSS、智联招聘、前程无忧、猎聘、拉勾网、牛客网');
   addLog('info', `关键词：${keywords.join(', ')}`);
   addLog('info', '========================================');
 
   try {
     const sites = [
-      { name: 'BOSS直聘', code: 'boss' },
+      { name: 'BOSS', code: 'boss' },
       { name: '智联招聘', code: 'zhaopin' },
       { name: '前程无忧', code: '51job' },
-      { name: '猎聘', code: 'liepin' }
+      { name: '猎聘', code: 'liepin' },
+      { name: '拉勾网', code: 'lagou' },
+      { name: '牛客网', code: 'nowcoder' }
     ];
     
     const city = defaultCities.join(',');
     let totalCreated = 0;
     let totalFailed = 0;
 
-    for (const site of sites) {
+    for (let i = 0; i < sites.length; i++) {
+      const site = sites[i];
       addLog('info', `----------------------------------------`);
       addLog('info', `正在爬取 ${site.name}...`);
+      crawlStatus.value = `正在爬取 ${site.name}`;
+      crawlProgress.value = Math.round((i / sites.length) * 30);
 
       const task = {
         sourceSite: site.code,
@@ -454,15 +609,16 @@ const startQuickCrawl = async () => {
 
       try {
         addLog('info', `创建 ${site.name} 爬取任务...`);
-        const response = await http.post('/crawl/task', task);
+        const taskId = await http.post('/crawl/task', task) as number;
         
-        if (response) {
+        if (taskId) {
           totalCreated++;
-          addLog('success', `✓ ${site.name} 任务创建成功 (任务ID: ${response})`);
+          quickTaskIds.value.push(taskId);
+          addLog('success', `✓ ${site.name} 任务创建成功 (任务ID: ${taskId})`);
           
           // 启动任务
           addLog('info', `启动 ${site.name} 爬取任务...`);
-          await http.post(`/crawl/task/${response}/start`);
+          await http.post(`/crawl/task/${taskId}/start`);
           addLog('success', `✓ ${site.name} 任务已启动`);
         } else {
           totalFailed++;
@@ -475,42 +631,105 @@ const startQuickCrawl = async () => {
       }
 
       // 避免请求过于频繁
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
+    crawlProgress.value = 40;
+    crawlStatus.value = '爬取任务已启动，等待执行完成';
+    
     addLog('info', '========================================');
     addLog('success', `所有平台爬取任务已创建完成`);
     addLog('success', `成功创建 ${totalCreated} 个爬取任务`);
     if (totalFailed > 0) {
       addLog('warning', `失败 ${totalFailed} 个爬取任务`);
     }
-    addLog('info', '正在后台执行爬取，请稍候...');
-    addLog('info', '预计需要 1-2 分钟完成爬取');
+    addLog('info', '正在后台执行爬取，系统将自动轮询任务状态...');
     addLog('info', '========================================');
     
     ElMessage.success('一键爬取任务已启动，正在后台执行');
 
-    // 延迟刷新数据，确保爬取有足够时间完成
-    setTimeout(() => {
-      addLog('info', '正在刷新岗位数据...');
-      loadPreviewData();
-      loadData();
-      addLog('success', '✓ 数据刷新完成，请查看岗位列表');
-    }, 12000);
+    startQuickPolling();
 
   } catch (error: any) {
     const errorMsg = error.message || '未知错误';
     addLog('error', `爬取失败：${errorMsg}`);
     addLog('error', '请检查网络连接或后端服务是否正常');
     ElMessage.error('爬取失败，请检查网络连接或后端服务');
-  } finally {
-    setTimeout(() => {
-      quickCrawling.value = false;
-      addLog('info', '========================================');
-      addLog('info', '爬取流程结束');
-      addLog('info', '========================================');
-    }, 15000);
+    quickCrawling.value = false;
   }
+};
+
+const stopQuickPolling = () => {
+  if (quickPollTimer.value != null) {
+    window.clearInterval(quickPollTimer.value);
+    quickPollTimer.value = null;
+  }
+};
+
+const updateQuickTasksStatus = async () => {
+  try {
+    const res = await http.get('/crawl/tasks');
+    const allTasks = res.data || [];
+    const quickTasks = allTasks.filter(t => quickTaskIds.value.includes(t.id));
+    
+    // 只更新状态发生变化的任务
+    let updated = false;
+    tasks.value = tasks.value.map(task => {
+      const updatedTask = quickTasks.find(t => t.id === task.id);
+      if (updatedTask && updatedTask.status !== task.status) {
+        updated = true;
+        return updatedTask;
+      }
+      return task;
+    });
+    
+    return quickTasks;
+  } catch (error) {
+    console.error('更新任务状态失败:', error);
+    return [];
+  }
+};
+
+const startQuickPolling = () => {
+  stopQuickPolling();
+  let rounds = 0;
+  const totalTasks = quickTaskIds.value.length;
+  quickPollTimer.value = window.setInterval(async () => {
+    rounds++;
+    try {
+      const quickTasks = await updateQuickTasksStatus();
+      const running = quickTasks.filter(t => t.status === 'RUNNING').length;
+      const finished = quickTasks.filter(t => t.status === 'FINISHED' || t.status === 'FAILED').length;
+      addLog('info', `轮询状态：运行中 ${running} 个，已结束 ${finished}/${totalTasks}`);
+
+      // 更新爬取进度
+      const progress = 40 + Math.round((finished / totalTasks) * 60);
+      crawlProgress.value = Math.min(progress, 100);
+      
+      if (running > 0) {
+        crawlStatus.value = `正在爬取中，已完成 ${finished}/${totalTasks} 个任务`;
+      } else if (finished < totalTasks) {
+        crawlStatus.value = `等待任务执行，已完成 ${finished}/${totalTasks} 个任务`;
+      } else {
+        crawlStatus.value = '所有任务已完成';
+      }
+
+      if (finished === totalTasks || rounds >= 30) {
+        stopQuickPolling();
+        await loadPreviewData();
+        await loadJobStats();
+        quickCrawling.value = false;
+        crawlProgress.value = 100;
+        crawlStatus.value = '爬取完成';
+        addLog('success', '✓ 爬取任务轮询结束，数据已刷新');
+        addLog('info', '========================================');
+        addLog('info', '爬取流程结束');
+        addLog('info', '========================================');
+      }
+    } catch (e) {
+      addLog('warning', '轮询任务状态失败，稍后重试');
+    }
+  }, 8000);
 };
 
 const addLog = (type: string, message: string) => {
@@ -525,7 +744,9 @@ const addLog = (type: string, message: string) => {
 
   if (logContentRef.value) {
     setTimeout(() => {
-      logContentRef.value.scrollTop = logContentRef.value.scrollHeight;
+      if (logContentRef.value) {
+        logContentRef.value.scrollTop = logContentRef.value.scrollHeight;
+      }
     }, 100);
   }
 };
@@ -577,8 +798,8 @@ const restartTask = async (task: any) => {
       city: task.city || '长沙'
     };
     
-    const response = await http.post('/crawl/task', newTask);
-    await http.post(`/crawl/task/${response}/start`);
+    const taskId = await http.post('/crawl/task', newTask);
+    await http.post(`/crawl/task/${taskId}/start`);
     
     ElMessage.success('新爬取任务已创建并启动');
     loadData();
@@ -598,7 +819,8 @@ const getStatusType = (status: string) => {
   const types: Record<string, any> = {
     PENDING: 'info',
     RUNNING: 'warning',
-    FINISHED: 'success'
+    FINISHED: 'success',
+    FAILED: 'danger'
   };
   return types[status] || 'info';
 };
@@ -607,7 +829,8 @@ const getStatusText = (status: string) => {
   const texts: Record<string, string> = {
     PENDING: '待执行',
     RUNNING: '执行中',
-    FINISHED: '已完成'
+    FINISHED: '已完成',
+    FAILED: '失败'
   };
   return texts[status] || status;
 };
@@ -618,15 +841,21 @@ const indexMethod = (index: number) => {
 
 const formatSalary = (min?: number, max?: number) => {
   if (!min && !max) return '面议';
-  if (min && max) return `${min}-${max}K`;
-  if (min) return `${min}K+`;
-  if (max) return `${max}K以下`;
+  const minK = min ? (min / 1000).toFixed(1) : '';
+  const maxK = max ? (max / 1000).toFixed(1) : '';
+  if (min && max) return `${minK}-${maxK}K`;
+  if (min) return `${minK}K+`;
+  if (max) return `${maxK}K以下`;
   return '面议';
 };
 
 onMounted(() => {
   loadData();
   loadPreviewData();
+});
+
+onUnmounted(() => {
+  stopQuickPolling();
 });
 </script>
 
@@ -654,6 +883,100 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   margin-top: 16px;
+}
+
+/* 数据统计卡片 */
+.stat-card {
+  border: none !important;
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fc 100%) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06) !important;
+  transition: all 0.3s ease !important;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px) !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
+.stat-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #fff;
+}
+
+.stat-card:nth-child(1) .stat-icon {
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+}
+
+.stat-card:nth-child(2) .stat-icon {
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+}
+
+.stat-card:nth-child(3) .stat-icon {
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+.stat-card:nth-child(4) .stat-icon {
+  background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+}
+
+.stat-icon :deep(.el-icon) {
+  color: #fff !important;
+}
+
+.stat-info {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #303133;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #909399;
+  margin-top: 4px;
+}
+
+/* 进度条卡片 */
+.progress-card {
+  border: none !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06) !important;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 16px;
+}
+
+.progress-info {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #606266;
+  text-align: center;
 }
 
 .preview-actions {

@@ -30,6 +30,7 @@ export interface JobItem {
   salaryUnit: string;
   skills: string;
   jobDesc?: string;
+  url?: string;
   publishTime?: string;
   lastSeenAt?: string;
   createdAt: string;

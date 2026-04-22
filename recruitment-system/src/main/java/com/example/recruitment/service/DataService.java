@@ -8,5 +8,7 @@ public interface DataService {
     void importJobs(MultipartFile file);
 
     void exportJobs(HttpServletResponse response, Integer limit);
+
+    int cleanupAllData();
 }
 

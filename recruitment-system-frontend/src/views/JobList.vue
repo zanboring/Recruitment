@@ -128,7 +128,7 @@
 
       <el-row :gutter="20" v-loading="loading" class="job-grid">
         <el-col :span="8" v-for="job in list" :key="job.id" class="job-col">
-          <el-card class="job-card" shadow="hover">
+          <el-card class="job-card" shadow="hover" @click="handleJobClick(job)" style="cursor: pointer;">
             <!-- 卡片头部 -->
             <div class="job-card-header">
               <div class="job-title-wrapper">
@@ -171,6 +171,15 @@
                 <el-icon><Clock /></el-icon>
                 <span>{{ job.experience || '经验不限' }}</span>
               </div>
+            </div>
+
+            <!-- 岗位介绍 -->
+            <div class="job-desc" v-if="job.jobDesc">
+              <div class="desc-title">
+                <el-icon><Document /></el-icon>
+                <span>岗位介绍</span>
+              </div>
+              <div class="desc-content">{{ truncateDesc(job.jobDesc) }}</div>
             </div>
 
             <!-- 技能标签 -->
@@ -284,8 +293,8 @@
           </div>
           <el-row :gutter="12">
             <el-col :span="6" v-for="(skill, index) in aiResult.skillDemands" :key="skill.skill">
-              <el-card shadow="hover" class="skill-card" :class="'skill-rank-' + (index + 1)">
-                <div class="skill-rank">{{ index + 1 }}</div>
+              <el-card shadow="hover" class="skill-card" :class="'skill-rank-' + (Number(index) + 1)">
+                <div class="skill-rank">{{ Number(index) + 1 }}</div>
                 <div class="skill-name">{{ skill.skill }}</div>
                 <div class="skill-count">{{ skill.count }}个岗位</div>
                 <el-tag :type="getSkillLevelType(skill.level)" size="small">{{ skill.level }}</el-tag>
@@ -464,7 +473,7 @@ const exportToExcel = async () => {
       }
     });
 
-    const blob = new Blob([response], {
+    const blob = new Blob([response.data], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
 
@@ -534,21 +543,37 @@ const getSkillLevelType = (level: string) => {
   return map[level] || 'info';
 };
 
-const getSkillTagType = (index: number) => {
+const getSkillTagType = (index: number | string) => {
   const types = ['', 'success', 'warning', 'danger'];
-  return types[index % 4];
+  return types[Number(index) % 4];
 };
 
-const formatSalary = (min?: number, max?: number) => {
+const formatSalary = (min?: number | string, max?: number | string) => {
   if (!min && !max) return '面议';
-  if (min && max) return `${min}-${max}`;
-  if (max) return `${max}以下`;
-  return `${min}以上`;
+  const minNum = Number(min) || 0;
+  const maxNum = Number(max) || 0;
+  if (minNum && maxNum) return `${minNum}-${maxNum}`;
+  if (minNum) return `${minNum}+`;
+  if (maxNum) return `${maxNum}以下`;
+  return '面议';
 };
 
 const formatDate = (date: string) => {
   if (!date) return '未知';
   return date.substring(0, 10);
+};
+
+const handleJobClick = (job: any) => {
+  if (job.url) {
+    window.open(job.url, '_blank');
+  } else {
+    ElMessage.warning('该岗位暂无详情链接');
+  }
+};
+
+const truncateDesc = (desc: string) => {
+  if (!desc) return '';
+  return desc.length > 100 ? desc.substring(0, 100) + '...' : desc;
 };
 </script>
 
@@ -736,6 +761,34 @@ const formatDate = (date: string) => {
 
 .info-item .el-icon {
   color: #909399;
+}
+
+.job-desc {
+  margin-bottom: 14px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.desc-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.desc-content {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .job-skills {

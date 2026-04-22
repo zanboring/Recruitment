@@ -11,7 +11,7 @@ export interface CrawlTask {
   sourceSite: string;
   keyword: string;
   city: string;
-  status: 'PENDING' | 'RUNNING' | 'FINISHED';
+  status: 'PENDING' | 'RUNNING' | 'FINISHED' | 'FAILED';
   jobCount: number;
   message: string;
   createdAt: string;

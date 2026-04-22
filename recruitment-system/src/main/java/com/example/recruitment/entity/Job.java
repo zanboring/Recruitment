@@ -21,6 +21,7 @@ public class Job {
     private String salaryUnit;
     private String skills;
     private String jobDesc;
+    private String url;
     private LocalDateTime publishTime;
     private LocalDateTime lastSeenAt;
     private LocalDateTime createdAt;
@@ -55,6 +56,8 @@ public class Job {
     public void setSkills(String skills) { this.skills = skills; }
     public String getJobDesc() { return jobDesc; }
     public void setJobDesc(String jobDesc) { this.jobDesc = jobDesc; }
+    public String getUrl() { return url; }
+    public void setUrl(String url) { this.url = url; }
     public LocalDateTime getPublishTime() { return publishTime; }
     public void setPublishTime(LocalDateTime publishTime) { this.publishTime = publishTime; }
     public LocalDateTime getLastSeenAt() { return lastSeenAt; }
