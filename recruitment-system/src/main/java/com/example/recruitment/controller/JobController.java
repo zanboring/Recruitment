@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.util.List;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 @Slf4j
 @RestController
 @RequestMapping("/api/jobs")
@@ -35,6 +37,7 @@ public class JobController {
 
     @PostMapping
     @Operation(summary = "新增岗位", description = "添加新的岗位信息")
+    @PreAuthorize("hasAuthority('job:write') or hasRole('ADMIN')")
     public Result<Void> add(@RequestBody Job job) {
         log.info("新增岗位: title={}, company={}", job.getTitle(), job.getCompanyName());
         jobService.addJob(job);
@@ -43,6 +46,7 @@ public class JobController {
 
     @PutMapping
     @Operation(summary = "更新岗位", description = "更新岗位信息")
+    @PreAuthorize("hasAuthority('job:write') or hasRole('ADMIN')")
     public Result<Void> update(@RequestBody Job job) {
         log.info("更新岗位: id={}, title={}", job.getId(), job.getTitle());
         jobService.updateJob(job);
@@ -51,6 +55,7 @@ public class JobController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除岗位", description = "根据ID删除岗位")
+    @PreAuthorize("hasAuthority('job:delete') or hasRole('ADMIN')")
     public Result<Void> delete(@PathVariable Long id) {
         log.info("删除岗位: id={}", id);
         jobService.deleteJob(id);

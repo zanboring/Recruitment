@@ -14,11 +14,12 @@
 
       <el-card class="login-card" shadow="hover">
         <div class="card-header">
-          <h2>欢迎登录</h2>
-          <p>Enter your credentials to access the system</p>
+          <h2>{{ isRegisterMode ? '创建账号' : '欢迎登录' }}</h2>
+          <p>{{ isRegisterMode ? '填写信息完成注册' : 'Enter your credentials to access the system' }}</p>
         </div>
 
-        <el-form :model="form" :rules="rules" ref="formRef" label-position="top">
+        <!-- 登录表单 -->
+        <el-form v-if="!isRegisterMode" :model="form" :rules="rules" ref="formRef" label-position="top">
           <el-form-item label="用户名" prop="username">
             <el-input
               v-model="form.username"
@@ -53,7 +54,63 @@
           </el-form-item>
           <el-form-item>
             <div class="register-link">
-              还没有账号？<el-button type="primary" link @click="onRegister">立即注册</el-button>
+              还没有账号？<el-button type="primary" link @click="switchToRegister">立即注册</el-button>
+            </div>
+          </el-form-item>
+        </el-form>
+
+        <!-- 注册表单 -->
+        <el-form v-else :model="registerForm" :rules="registerRules" ref="registerFormRef" label-position="top">
+          <el-form-item label="用户名" prop="username">
+            <el-input
+              v-model="registerForm.username"
+              placeholder="请输入用户名（用于登录）"
+              size="large"
+              :prefix-icon="User"
+            />
+          </el-form-item>
+          <el-form-item label="邮箱" prop="email">
+            <el-input
+              v-model="registerForm.email"
+              placeholder="请输入邮箱地址"
+              size="large"
+              :prefix-icon="Message"
+            />
+          </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input
+              v-model="registerForm.password"
+              type="password"
+              placeholder="请输入密码（至少6位）"
+              size="large"
+              show-password
+              :prefix-icon="Lock"
+            />
+          </el-form-item>
+          <el-form-item label="确认密码" prop="confirmPassword">
+            <el-input
+              v-model="registerForm.confirmPassword"
+              type="password"
+              placeholder="请再次输入密码"
+              size="large"
+              show-password
+              :prefix-icon="Lock"
+            />
+          </el-form-item>
+          <el-form-item>
+            <div class="register-actions">
+              <el-button size="large" class="back-btn" @click="switchToLogin">
+                返回登录
+              </el-button>
+              <el-button
+                type="primary"
+                size="large"
+                class="login-btn"
+                :loading="loading"
+                @click="onRegister"
+              >
+                注册
+              </el-button>
             </div>
           </el-form-item>
         </el-form>
@@ -72,24 +129,72 @@ import { useRouter } from 'vue-router';
 import { loginApi, registerApi } from '@/api/auth';
 import { useUserStore } from '@/store/user';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
-import { User, Lock, DataBoard } from '@element-plus/icons-vue';
+import { User, Lock, DataBoard, Message } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const userStore = useUserStore();
 const particleCanvas = ref<HTMLCanvasElement | null>(null);
 
+// 是否处于注册模式
+const isRegisterMode = ref(false);
+
+// 登录表单
 const form = reactive({
   username: '',
   password: '',
   rememberMe: false
 });
 
+// 注册表单
+const registerForm = reactive({
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: ''
+});
+
+// 确认密码校验器
+const validateConfirmPassword = (rule: any, value: string, callback: any) => {
+  if (value !== registerForm.password) {
+    callback(new Error('两次输入的密码不一致'));
+  } else {
+    callback();
+  }
+};
+
+// 登录表单校验规则
 const rules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 20, message: '用户名长度为3-20个字符', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' }
+  ]
+};
+
+// 注册表单校验规则
+const registerRules: FormRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 20, message: '用户名长度为3-20个字符', trigger: 'blur' }
+  ],
+  email: [
+    { required: true, message: '请输入邮箱地址', trigger: 'blur' },
+    { type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码至少6个字符', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    { validator: validateConfirmPassword, trigger: 'blur' }
+  ]
 };
 
 const formRef = ref<FormInstance>();
+const registerFormRef = ref<FormInstance>();
 const loading = ref(false);
 
 const onSubmit = () => {
@@ -115,17 +220,44 @@ const onSubmit = () => {
   });
 };
 
-const onRegister = async () => {
-  if (!form.username || !form.password) {
-    ElMessage.warning('请先输入用户名和密码');
-    return;
+// 切换到注册模式
+const switchToRegister = () => {
+  isRegisterMode.value = true;
+  // 预填用户名（如果登录表单已填写）
+  if (form.username) {
+    registerForm.username = form.username;
   }
-  await registerApi({
-    username: form.username,
-    password: form.password,
-    email: form.username + '@example.com'
+};
+
+// 切换回登录模式
+const switchToLogin = () => {
+  isRegisterMode.value = false;
+  // 预填用户名（如果注册表单已填写）
+  if (registerForm.username) {
+    form.username = registerForm.username;
+  }
+};
+
+// 注册处理
+const onRegister = () => {
+  if (!registerFormRef.value) return;
+  registerFormRef.value.validate(async (valid) => {
+    if (!valid) return;
+    loading.value = true;
+    try {
+      await registerApi({
+        username: registerForm.username,
+        password: registerForm.password,
+        email: registerForm.email
+      });
+      ElMessage.success('注册成功，请使用新账号登录');
+      // 切换回登录模式并预填信息
+      form.username = registerForm.username;
+      isRegisterMode.value = false;
+    } finally {
+      loading.value = false;
+    }
   });
-  ElMessage.success('注册成功，请再次点击登录');
 };
 
 class Particle {
@@ -361,6 +493,22 @@ onUnmounted(() => {
   text-align: center;
   color: #909399;
   font-size: 14px;
+}
+
+.register-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.register-actions .back-btn {
+  flex: 1;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.register-actions .login-btn {
+  flex: 2;
 }
 
 .login-footer {

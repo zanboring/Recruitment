@@ -10,15 +10,31 @@ const instance = axios.create({
   }
 });
 
+/**
+ * 开发环境日志（生产环境自动禁用）
+ * 仅记录URL和方法，不打印敏感数据（password/token等）
+ */
+const devLog = (type: 'request' | 'response' | 'error', info: Record<string, any>) => {
+  if (import.meta.env.DEV) {
+    const icon = type === 'request' ? '🚀' : type === 'response' ? '✅' : '❌';
+    // 脱敏：不打印完整的data和headers
+    const safeInfo = {
+      url: info.url,
+      method: info.method || undefined,
+      status: info.status || undefined,
+      // 仅在错误时显示简短信息
+      message: type === 'error' ? info.message : undefined
+    };
+    console.log(`${icon} [${type.toUpperCase()}]`, JSON.stringify(safeInfo).replace(/[{}"]/g, ''));
+  }
+};
+
 instance.interceptors.request.use(
   (config) => {
-    // 打印请求日志
-    console.log('🚀 Request:', {
-      url: config.url,
-      method: config.method,
-      params: config.params,
-      data: config.data,
-      headers: config.headers
+    // 开发环境日志（已脱敏）
+    devLog('request', { 
+      url: config.url, 
+      method: config.method?.toUpperCase() 
     });
     
     const userStore = useUserStore();
@@ -29,19 +45,17 @@ instance.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error('❌ Request Error:', error);
+    devLog('error', { message: error.message });
     return Promise.reject(error);
   }
 );
 
 instance.interceptors.response.use(
   (response) => {
-    // 打印响应日志
-    console.log('✅ Response:', {
-      url: response.config.url,
-      status: response.status,
-      statusText: response.statusText,
-      data: response.data
+    // 开发环境日志（仅记录状态码，不打印完整响应体）
+    devLog('response', { 
+      url: response.config.url, 
+      status: response.status 
     });
     
     // File download: let browser handle blob/arraybuffer directly
@@ -56,15 +70,33 @@ instance.interceptors.response.use(
     return res.data;
   },
   (error) => {
-    console.error('❌ Response Error:', {
-      message: error.message,
-      config: error.config,
-      response: error.response
-    });
-    ElMessage.error(error.message || '网络错误');
+    // 统一错误处理：网络超时/服务器错误等
+    const message = error.response?.data?.msg || error.message || '网络错误';
+    devLog('error', { message });
+    
+    // 根据HTTP状态码提供更友好的提示
+    if (error.response) {
+      const status = error.response.status;
+      if (status === 401) {
+        ElMessage.error('登录已过期，请重新登录');
+        // Token无效或过期，清除本地存储并跳转登录页
+        const userStore = useUserStore();
+        userStore.logout();
+        window.location.href = '/login';
+      } else if (status === 403) {
+        ElMessage.error('没有权限执行此操作');
+      } else if (status === 500) {
+        ElMessage.error('服务器内部错误，请稍后重试');
+      } else {
+        ElMessage.error(message);
+      }
+    } else if (error.code === 'ECONNABORTED') {
+      ElMessage.error('请求超时，请检查网络连接');
+    } else {
+      ElMessage.error(message);
+    }
     return Promise.reject(error);
   }
 );
 
 export default instance;
-

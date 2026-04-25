@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 @Slf4j
 @RestController
 @RequestMapping("/api/crawl")
@@ -28,6 +30,7 @@ public class CrawlController {
 
     @PostMapping("/task")
     @Operation(summary = "创建爬虫任务", description = "创建新的数据爬取任务")
+    @PreAuthorize("hasAuthority('crawl:manage') or hasRole('ADMIN')")
     public Result<Long> createTask(@Valid @RequestBody CrawlTask task) {
         log.info("创建爬虫任务: sourceSite={}, keyword={}, city={}", 
             task.getSourceSite(), task.getKeyword(), task.getCity());
@@ -38,6 +41,7 @@ public class CrawlController {
 
     @PostMapping("/task/{id}/start")
     @Operation(summary = "启动爬虫任务", description = "启动指定的爬虫任务")
+    @PreAuthorize("hasAuthority('crawl:manage') or hasRole('ADMIN')")
     public Result<Void> start(@PathVariable("id") Long id) {
         log.info("启动爬虫任务: taskId={}", id);
         crawlService.startTask(id);
@@ -56,6 +60,7 @@ public class CrawlController {
 
     @PostMapping("/task/{id}/delete")
     @Operation(summary = "删除爬虫任务", description = "删除指定的爬虫任务")
+    @PreAuthorize("hasAuthority('crawl:manage') or hasRole('ADMIN')")
     public Result<Void> deleteTask(@PathVariable("id") Long id) {
         log.info("删除爬虫任务: taskId={}", id);
         crawlService.deleteTask(id);

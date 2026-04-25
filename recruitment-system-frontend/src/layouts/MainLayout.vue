@@ -127,7 +127,19 @@
       <el-main class="main-content">
         <router-view v-slot="{ Component }">
           <transition name="fade-slide" mode="out-in">
-            <component :is="Component" />
+            <Suspense>
+              <template #default>
+                <component :is="Component" />
+              </template>
+              <template #fallback>
+                <div class="page-loading">
+                  <div class="loading-spinner">
+                    <el-icon class="is-loading" :size="40" color="#667eea"><Loading /></el-icon>
+                    <p>加载中...</p>
+                  </div>
+                </div>
+              </template>
+            </Suspense>
           </transition>
         </router-view>
       </el-main>
@@ -151,7 +163,8 @@ import {
   DataBoard,
   ArrowDown,
   User,
-  ChatDotRound
+  ChatDotRound,
+  Loading
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
@@ -457,5 +470,26 @@ onUnmounted(() => {
 
 .layout :deep(.el-main) {
   background: #f5f7fa;
+}
+
+/* 页面加载状态 */
+.page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.loading-spinner p {
+  color: #909399;
+  font-size: 14px;
+  margin: 0;
 }
 </style>

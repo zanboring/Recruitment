@@ -1,8 +1,8 @@
 <template>
   <div class="dashboard">
     <!-- 统计卡片区域 -->
-    <el-row :gutter="20" class="stat-row">
-      <el-col :span="6" v-for="(stat, index) in statCards" :key="index">
+    <el-row :gutter="[16, 16]" class="stat-row">
+      <el-col :xs="24" :sm="12" :md="6" v-for="(stat, index) in statCards" :key="index">
         <el-card class="stat-card" shadow="hover">
           <div class="stat-card-inner">
             <div class="stat-icon" :style="{ background: stat.gradient }">
@@ -14,14 +14,17 @@
                 <span class="unit" v-if="stat.unit">{{ stat.unit }}</span>
               </div>
               <div class="stat-label">{{ stat.label }}</div>
-              <div class="stat-trend" v-if="stat.trend">
-                <el-icon :color="stat.trend > 0 ? '#67c23a' : '#f56c6c'">
-                  <component :is="stat.trend > 0 ? 'ArrowUp' : 'ArrowDown'" />
-                </el-icon>
-                <span :style="{ color: stat.trend > 0 ? '#67c23a' : '#f56c6c' }">
-                  {{ Math.abs(stat.trend) }}%
-                </span>
-                <span class="trend-label">较上周</span>
+              <div class="stat-trend" v-if="stat.trend !== undefined">
+                <template v-if="stat.trend !== null">
+                  <el-icon :color="stat.trend > 0 ? '#67c23a' : '#f56c6c'">
+                    <component :is="stat.trend > 0 ? 'ArrowUp' : 'ArrowDown'" />
+                  </el-icon>
+                  <span :style="{ color: stat.trend > 0 ? '#67c23a' : '#f56c6c' }">
+                    {{ Math.abs(stat.trend) }}%
+                  </span>
+                  <span class="trend-label">较上周</span>
+                </template>
+                <span v-else class="trend-ready">数据已就绪</span>
               </div>
             </div>
           </div>
@@ -30,8 +33,8 @@
     </el-row>
 
     <!-- 图表区域 -->
-    <el-row :gutter="20" style="margin-top: 20px">
-      <el-col :span="12">
+    <el-row :gutter="[16, 16]" style="margin-top: 20px">
+      <el-col :xs="24" :md="12">
         <el-card class="chart-card" shadow="hover">
           <template #header>
             <div class="chart-header">
@@ -45,7 +48,7 @@
           <div ref="cityChartRef" class="chart"></div>
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :md="12">
         <el-card class="chart-card" shadow="hover">
           <template #header>
             <div class="chart-header">
@@ -61,8 +64,8 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20" style="margin-top: 20px">
-      <el-col :span="12">
+    <el-row :gutter="[16, 16]" style="margin-top: 20px">
+      <el-col :xs="24" :md="12">
         <el-card class="chart-card" shadow="hover">
           <template #header>
             <div class="chart-header">
@@ -76,7 +79,7 @@
           <div ref="skillChartRef" class="chart"></div>
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :md="12">
         <el-card class="chart-card" shadow="hover">
           <template #header>
             <div class="chart-header">
@@ -92,7 +95,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20" style="margin-top: 20px">
+    <el-row :gutter="[16, 16]" style="margin-top: 20px">
       <el-col :span="24">
         <el-card class="chart-card" shadow="hover">
           <template #header>
@@ -137,7 +140,7 @@ const companyCount = ref(0);
 const avgSalary = ref('0');
 const activeCount = ref(0);
 
-// 统计卡片数据
+// 统计卡片数据（趋势数据不再硬编码，仅在数据加载完成后显示）
 const statCards = computed(() => [
   {
     icon: Briefcase,
@@ -145,7 +148,7 @@ const statCards = computed(() => [
     value: jobCount.value,
     unit: '个',
     gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    trend: 12
+    trend: jobCount.value > 0 ? null : undefined // 数据就绪前不显示趋势
   },
   {
     icon: OfficeBuilding,
@@ -153,7 +156,7 @@ const statCards = computed(() => [
     value: companyCount.value,
     unit: '家',
     gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-    trend: 8
+    trend: companyCount.value > 0 ? null : undefined
   },
   {
     icon: Money,
@@ -161,7 +164,7 @@ const statCards = computed(() => [
     value: avgSalary.value,
     unit: '元/月',
     gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-    trend: 5
+    trend: avgSalary.value !== '0' ? null : undefined
   },
   {
     icon: TrendCharts,
@@ -169,7 +172,7 @@ const statCards = computed(() => [
     value: activeCount.value,
     unit: '个',
     gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-    trend: -2
+    trend: activeCount.value > 0 ? null : undefined
   }
 ]);
 
@@ -623,6 +626,11 @@ onMounted(() => {
 .trend-label {
   color: #c0c4cc;
   margin-left: 4px;
+}
+
+.trend-ready {
+  color: #67c23a;
+  font-size: 12px;
 }
 
 /* 图表卡片样式 */

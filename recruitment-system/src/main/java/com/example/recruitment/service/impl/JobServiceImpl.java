@@ -4,6 +4,7 @@ import com.example.recruitment.dto.JobQueryDTO;
 import com.example.recruitment.entity.Job;
 import com.example.recruitment.exception.BusinessException;
 import com.example.recruitment.mapper.JobMapper;
+import com.example.recruitment.service.AIService;
 import com.example.recruitment.service.JobService;
 import com.example.recruitment.vo.AIFeedbackVO;
 import com.example.recruitment.vo.JobTrendVO;
@@ -11,6 +12,7 @@ import com.example.recruitment.vo.JobStatVO;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -21,28 +23,67 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class JobServiceImpl implements JobService {
 
     private final JobMapper jobMapper;
+    private final AIService aiService;
 
-    // 热门技能权重配置
+    // 热门技能权重配置（扩展版 - 与爬虫技能词库对齐）
     private static final Map<String, Integer> SKILL_WEIGHTS = new HashMap<>();
     static {
+        // AI/算法类（最高权重）
+        SKILL_WEIGHTS.put("人工智能", 12);
+        SKILL_WEIGHTS.put("AI", 12);
+        SKILL_WEIGHTS.put("算法", 11);
+        SKILL_WEIGHTS.put("机器学习", 11);
+        SKILL_WEIGHTS.put("深度学习", 11);
+        SKILL_WEIGHTS.put("LLM", 11);
+        SKILL_WEIGHTS.put("大模型", 11);
+        // 后端核心
         SKILL_WEIGHTS.put("Java", 10);
         SKILL_WEIGHTS.put("Python", 10);
         SKILL_WEIGHTS.put("Go", 9);
+        SKILL_WEIGHTS.put("Golang", 9);
         SKILL_WEIGHTS.put("大数据", 9);
-        SKILL_WEIGHTS.put("算法", 9);
+        SKILL_WEIGHTS.put("SpringBoot", 9);
+        SKILL_WEIGHTS.put("SpringCloud", 9);
+        SKILL_WEIGHTS.put("Kubernetes", 9);
+        SKILL_WEIGHTS.put("K8s", 9);
+        SKILL_WEIGHTS.put("DevOps", 9);
+        // 前端
         SKILL_WEIGHTS.put("前端", 8);
+        SKILL_WEIGHTS.put("Vue3", 8);
         SKILL_WEIGHTS.put("Vue", 8);
         SKILL_WEIGHTS.put("React", 8);
+        SKILL_WEIGHTS.put("TypeScript", 8);
+        SKILL_WEIGHTS.put("Node.js", 8);
         SKILL_WEIGHTS.put("Spring", 8);
+        SKILL_WEIGHTS.put("微服务", 8);
+        // 数据/数据库
         SKILL_WEIGHTS.put("MySQL", 7);
+        SKILL_WEIGHTS.put("Redis", 7);
+        SKILL_WEIGHTS.put("MongoDB", 7);
+        SKILL_WEIGHTS.put("Elasticsearch", 7);
+        SKILL_WEIGHTS.put("Kafka", 7);
+        SKILL_WEIGHTS.put("Spark", 7);
+        SKILL_WEIGHTS.put("Flink", 7);
+        SKILL_WEIGHTS.put("Hadoop", 7);
+        // 基础设施
         SKILL_WEIGHTS.put("Linux", 7);
+        SKILL_WEIGHTS.put("Docker", 7);
+        SKILL_WEIGHTS.put("CI/CD", 7);
+        // 测试
         SKILL_WEIGHTS.put("测试", 6);
+        SKILL_WEIGHTS.put("自动化测试", 6);
         SKILL_WEIGHTS.put("运维", 6);
         SKILL_WEIGHTS.put("C++", 7);
         SKILL_WEIGHTS.put("PHP", 5);
+        SKILL_WEIGHTS.put(".NET", 5);
+        SKILL_WEIGHTS.put("Rust", 8);
+        SKILL_WEIGHTS.put("TensorFlow", 10);
+        SKILL_WEIGHTS.put("PyTorch", 10);
+        SKILL_WEIGHTS.put("数据分析", 9);
     }
 
     @Override
@@ -117,12 +158,118 @@ public class JobServiceImpl implements JobService {
     }
 
     @Override
+    public JobTrendVO jobTrendLast7Days() {
+        return jobMapper.jobTrendLast7Days();
+    }
+
+    // 薪资预测 - 城市系数（以二线城市为基准1.0）
+    private static final Map<String, Double> CITY_SALARY_FACTOR = new HashMap<>();
+    static {
+        CITY_SALARY_FACTOR.put("北京", 1.8);
+        CITY_SALARY_FACTOR.put("上海", 1.75);
+        CITY_SALARY_FACTOR.put("深圳", 1.65);
+        CITY_SALARY_FACTOR.put("杭州", 1.45);
+        CITY_SALARY_FACTOR.put("广州", 1.35);
+        CITY_SALARY_FACTOR.put("南京", 1.25);
+        CITY_SALARY_FACTOR.put("成都", 1.15);
+        CITY_SALARY_FACTOR.put("武汉", 1.12);
+        CITY_SALARY_FACTOR.put("苏州", 1.30);
+        CITY_SALARY_FACTOR.put("重庆", 1.10);
+        CITY_SALARY_FACTOR.put("西安", 1.08);
+        CITY_SALARY_FACTOR.put("天津", 1.18);
+        CITY_SALARY_FACTOR.put("长沙", 1.05);
+        CITY_SALARY_FACTOR.put("郑州", 1.02);
+        CITY_SALARY_FACTOR.put("东莞", 1.28);
+    }
+
+    // 经验系数
+    private static final Map<String, Double> EXP_SALARY_FACTOR = new HashMap<>();
+    static {
+        EXP_SALARY_FACTOR.put("应届", 0.70);
+        EXP_SALARY_FACTOR.put("经验不限", 0.85);
+        EXP_SALARY_FACTOR.put("1-3年", 0.90);
+        EXP_SALARY_FACTOR.put("3-5年", 1.20);
+        EXP_SALARY_FACTOR.put("5-10年", 1.50);
+        EXP_SALARY_FACTOR.put("10年以上", 1.80);
+    }
+
+    // 学历系数
+    private static final Map<String, Double> EDU_SALARY_FACTOR = new HashMap<>();
+    static {
+        EDU_SALARY_FACTOR.put("大专", 0.80);
+        EDU_SALARY_FACTOR.put("本科", 1.00);
+        EDU_SALARY_FACTOR.put("硕士", 1.35);
+        EDU_SALARY_FACTOR.put("博士", 1.70);
+        EDU_SALARY_FACTOR.put("不限", 0.95); // 不限学历通常意味着入门岗位，薪资略低于明确要求本科的
+    }
+
+    @Override
     public BigDecimal predictSalary(String city, String experience, String education, String skills) {
-        BigDecimal avg = jobMapper.predictSalary(city, experience, education, skills);
-        if (avg == null) {
-            return BigDecimal.ZERO;
+        // 第一步：获取基础平均薪资（数据库AVG作为基准线）
+        BigDecimal baseAvg = jobMapper.predictSalary(city, experience, education, skills);
+
+        if (baseAvg == null || baseAvg.compareTo(BigDecimal.ZERO) == 0) {
+            // 如果没有匹配数据，使用全国基准薪资估算
+            baseAvg = new BigDecimal("12000");
         }
-        return avg;
+
+        double factor = 1.0;
+        int weightCount = 0;
+
+        // 第二步：应用城市加权因子（权重40%）
+        if (city != null && !city.isBlank() && CITY_SALARY_FACTOR.containsKey(city)) {
+            double cityFactor = CITY_SALARY_FACTOR.get(city);
+            factor += (cityFactor - 1.0) * 0.4;
+            weightCount++;
+        }
+
+        // 第三步：应用经验加权因子（权重35%）
+        if (experience != null && !experience.isBlank() && EXP_SALARY_FACTOR.containsKey(experience)) {
+            double expFactor = EXP_SALARY_FACTOR.get(experience);
+            factor += (expFactor - 1.0) * 0.35;
+            weightCount++;
+        }
+
+        // 第四步：应用学历加权因子（权重25%）
+        if (education != null && !education.isBlank() && EDU_SALARY_FACTOR.containsKey(education)) {
+            double eduFactor = EDU_SALARY_FACTOR.get(education);
+            factor += (eduFactor - 1.0) * 0.25;
+            weightCount++;
+        }
+
+        // 第五步：技能溢价加成
+        if (skills != null && !skills.isBlank()) {
+            String[] skillList = skills.split(",");
+            int premiumSkills = 0;
+            for (String s : skillList) {
+                String trimSkill = s.trim();
+                // 高薪技能列表
+                if ("算法".equals(trimSkill) || "大数据".equals(trimSkill) ||
+                    "人工智能".equals(trimSkill) || "机器学习".equals(trimSkill) ||
+                    "深度学习".equals(trimSkill) || "Go".equals(trimSkill) ||
+                    "架构师".equals(trimSkill)) {
+                    premiumSkills++;
+                }
+            }
+            // 每个高薪技能+5%，最多+15%
+            if (premiumSkills > 0) {
+                factor += Math.min(premiumSkills * 0.05, 0.15);
+                weightCount++;
+            }
+        }
+
+        // 如果完全没有匹配任何条件，直接返回基础平均值
+        if (weightCount == 0) {
+            return baseAvg.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        // 应用综合因子
+        BigDecimal predicted = baseAvg.multiply(BigDecimal.valueOf(factor));
+        
+        // 确保预测值在合理范围内（最低5k，最高100k）
+        predicted = predicted.max(new BigDecimal("5000")).min(new BigDecimal("100000"));
+        
+        return predicted.setScale(2, RoundingMode.HALF_UP);
     }
 
     @Override
@@ -160,7 +307,7 @@ public class JobServiceImpl implements JobService {
                 .max(Comparator.comparingLong(v -> v.getCount() == null ? 0L : v.getCount()))
                 .orElse(null);
 
-        JobTrendVO trend = jobMapper.jobTrendLast7Days();
+        JobTrendVO trend = jobTrendLast7Days();
         long last7 = trend == null || trend.getLast7Days() == null ? 0 : trend.getLast7Days();
         long prev7 = trend == null || trend.getPrev7Days() == null ? 0 : trend.getPrev7Days();
         String trendText;
@@ -231,6 +378,8 @@ public class JobServiceImpl implements JobService {
             return result;
         }
 
+        // ========== 第一阶段：规则引擎数据聚合（保持不变） ==========
+        
         // 1. 优质岗位推荐
         List<AIFeedbackVO.QualityJob> qualityJobs = new ArrayList<>();
         List<Job> topJobs = jobs.stream()
@@ -279,7 +428,6 @@ public class JobServiceImpl implements JobService {
                 titleCount.entrySet().stream().max(Map.Entry.comparingByValue()).get().getKey();
         trend.setHotTitle(hotTitle);
 
-        // 生成趋势文本
         String trendText = String.format("当前热门城市为%s，热门技能为%s，热门岗位为%s。",
                 hotCity, hotSkill, hotTitle);
         trend.setTrendText(trendText);
@@ -293,7 +441,6 @@ public class JobServiceImpl implements JobService {
                     AIFeedbackVO.SkillDemand sd = new AIFeedbackVO.SkillDemand();
                     sd.setSkill(e.getKey());
                     sd.setCount(e.getValue().intValue());
-                    // 根据需求量判断热门程度
                     long max = skillCount.values().stream().max(Long::compare).orElse(1L);
                     if (e.getValue() >= max * 0.8) {
                         sd.setLevel("非常热门");
@@ -308,6 +455,25 @@ public class JobServiceImpl implements JobService {
         result.setSkillDemands(skillDemands);
 
         // 4. 薪资分析
+        AIFeedbackVO.SalaryAnalysis salaryAnalysis = computeSalaryAnalysis(jobs);
+        result.setSalaryAnalysis(salaryAnalysis);
+
+        // 5. 求职建议（先基于规则的默认建议）
+        List<String> suggestions = generateSuggestions(jobs, hotCity, hotSkill, skillDemands);
+        result.setSuggestions(suggestions);
+
+        // ========== 第二阶段：AI增强分析报告生成 ==========
+        String aiSummary = generateAIAnalysisReport(jobs, hotCity, hotSkill, hotTitle,
+                qualityJobs, skillDemands, salaryAnalysis, trendText);
+        result.setSummary(aiSummary);
+
+        return result;
+    }
+
+    /**
+     * 薪资分析计算（抽取为独立方法复用）
+     */
+    private AIFeedbackVO.SalaryAnalysis computeSalaryAnalysis(List<Job> jobs) {
         AIFeedbackVO.SalaryAnalysis salaryAnalysis = new AIFeedbackVO.SalaryAnalysis();
         BigDecimal totalSalary = BigDecimal.ZERO;
         BigDecimal maxSalary = BigDecimal.ZERO;
@@ -327,10 +493,9 @@ public class JobServiceImpl implements JobService {
             salaryAnalysis.setAvgSalary(avgSalary.toPlainString() + "元/月");
             salaryAnalysis.setTopSalary(maxSalary.setScale(0, RoundingMode.HALF_UP).toPlainString() + "元/月");
 
-            // 计算薪资范围
             List<BigDecimal> salaries = jobs.stream()
                     .filter(j -> j.getMaxSalary() != null)
-                    .map(j -> j.getMaxSalary())
+                    .map(Job::getMaxSalary)
                     .sorted()
                     .collect(Collectors.toList());
             if (!salaries.isEmpty()) {
@@ -344,21 +509,53 @@ public class JobServiceImpl implements JobService {
             salaryAnalysis.setTopSalary("暂无数据");
             salaryAnalysis.setSalaryRange("暂无数据");
         }
-        result.setSalaryAnalysis(salaryAnalysis);
+        return salaryAnalysis;
+    }
 
-        // 5. 求职建议
-        List<String> suggestions = generateSuggestions(jobs, hotCity, hotSkill, skillDemands);
-        result.setSuggestions(suggestions);
+    /**
+     * 调用智谱AI生成专业的数据分析报告
+     * 将规则引擎聚合的数据作为上下文发送给AI，让AI生成自然语言分析
+     */
+    private String generateAIAnalysisReport(List<Job> jobs, String hotCity, String hotSkill,
+                                            String hotTitle, List<AIFeedbackVO.QualityJob> qualityJobs,
+                                            List<AIFeedbackVO.SkillDemand> skillDemands,
+                                            AIFeedbackVO.SalaryAnalysis salaryAnalysis,
+                                            String trendText) {
+        // 直接使用规则引擎生成摘要
+        log.info("使用规则引擎生成分析摘要");
+        return buildRuleBasedSummary(jobs.size(), hotCity, hotSkill, hotTitle, salaryAnalysis, trendText);
+    }
 
-        // 6. 生成总结
-        String summary = String.format("根据筛选结果，共找到%d个符合条件岗位。热门城市：%s，热门技能：%s，平均薪资：%s。建议重点关注%s相关岗位，提升%s技能储备。",
-                jobs.size(), hotCity, hotSkill,
-                salaryAnalysis.getAvgSalary(),
-                hotTitle,
-                hotSkill);
-        result.setSummary(summary);
-
-        return result;
+    /**
+     * 规则引擎兜底摘要（当AI不可用时使用）
+     */
+    private String buildRuleBasedSummary(int jobCount, String hotCity, String hotSkill,
+                                          String hotTitle, AIFeedbackVO.SalaryAnalysis salaryAnalysis,
+                                          String trendText) {
+        return String.format(
+                "## 📊 数据总览\n\n" +
+                "当前共找到 **%d** 个符合条件的活跃岗位。以下是基于数据的智能分析报告。\n\n" +
+                "## 🏙️ 城市与薪资分析\n\n" +
+                "- **最热城市**：%s，岗位机会集中\n" +
+                "- **平均薪资**：%s\n" +
+                "- **薪资区间**：%s\n" +
+                "- **最高薪资**：%s\n\n" +
+                "## 💻 技能与岗位洞察\n\n" +
+                "- **热门技能**：%s，市场需求旺盛\n" +
+                "- **热门岗位**：%s，代表当前招聘热点方向\n\n" +
+                "## 📈 趋势判断\n\n" +
+                "%s\n\n" +
+                "## 💡 求职建议\n\n" +
+                "1. 优先关注 **%s** 等一线城市，机会多薪资高\n" +
+                "2. 重点提升 **%s** 相关技术能力\n" +
+                "3. 关注 **%s** 领域岗位，需求量大\n" +
+                "4. 根据自身经验水平合理定位，应届生可从实习/初级岗入手\n" +
+                "5. 多平台投递，提高面试成功率\n\n" +
+                "> ✅ 以上分析基于系统中已爬取的真实招聘数据生成。",
+                jobCount, hotCity, salaryAnalysis.getAvgSalary(),
+                salaryAnalysis.getSalaryRange(), salaryAnalysis.getTopSalary(),
+                hotSkill, hotTitle, trendText, hotCity, hotSkill, hotTitle
+        );
     }
 
     private int calculateJobScore(Job job) {

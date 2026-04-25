@@ -7,6 +7,7 @@ import com.example.recruitment.entity.User;
 import com.example.recruitment.exception.BusinessException;
 import com.example.recruitment.mapper.UserMapper;
 import com.example.recruitment.service.UserService;
+import com.example.recruitment.util.JwtUtil;
 import com.example.recruitment.util.PasswordUtil;
 import com.example.recruitment.vo.UserVO;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -22,6 +22,7 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
+    private final JwtUtil jwtUtil;
 
     @Override
     public UserVO login(UserLoginDTO dto) {
@@ -44,7 +45,8 @@ public class UserServiceImpl implements UserService {
         vo.setUsername(user.getUsername());
         vo.setRole(user.getRole());
         vo.setEmail(user.getEmail());
-        vo.setToken(UUID.randomUUID().toString());
+        // 生成 JWT Token（替代之前的 UUID）
+        vo.setToken(jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole()));
         
         log.info("用户登录成功: userId={}, username={}, role={}", user.getId(), user.getUsername(), user.getRole());
         return vo;

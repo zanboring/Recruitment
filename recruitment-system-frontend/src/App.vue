@@ -1,5 +1,9 @@
 <template>
-  <router-view />
+  <router-view v-slot="{ Component, route }">
+    <keep-alive :include="['AIChat']">
+      <component :is="Component" :key="route.path" />
+    </keep-alive>
+  </router-view>
 </template>
 
 <script setup lang="ts"></script>
@@ -31,6 +35,17 @@
   --bg-color: #f5f7fa;
   --bg-white: #ffffff;
   --bg-overlay: rgba(0, 0, 0, 0.5);
+  --bg-code: #f5f7fa;
+  --bg-code-inline: #f0f0f5;
+  --bg-blockquote: #f8f9ff;
+  --bg-highlight-warm: #fff7ed;
+  --bg-highlight-yellow: #fffbe6;
+  --bg-table-alt: #f8f9fc;
+  --bg-skeleton-start: #f0f2f5;
+  --bg-skeleton-mid: #e6e8eb;
+  --bg-table-header-from: #f8f9fc;
+  --bg-table-header-to: #f4f6f9;
+  --bg-table-striped: #fafbfc;
 
   /* 圆角 */
   --border-radius-small: 4px;
@@ -42,6 +57,17 @@
   --box-shadow-light: 0 2px 12px rgba(0, 0, 0, 0.08);
   --box-shadow-base: 0 4px 16px rgba(0, 0, 0, 0.1);
   --box-shadow-dark: 0 8px 30px rgba(0, 0, 0, 0.15);
+
+  /* Markdown/代码专用色 */
+  --md-heading-border: #e8f0fe;
+  --md-heading-text: #1a1a2e;
+  --md-body-text: #3d3d3d;
+  --md-code-accent: #e83e8c;
+  --md-code-text: #555;
+  --md-table-text: #555;
+  --md-table-border: #eee;
+  --md-blockquote-text: #556680;
+  --md-strong-color: #e65100;
 }
 
 * {
@@ -135,12 +161,12 @@ body,
 }
 
 .el-dialog__title {
-  color: #fff;
+  color: var(--bg-white);
   font-weight: 600;
 }
 
 .el-dialog__headerbtn .el-dialog__close {
-  color: #fff;
+  color: var(--bg-white);
 }
 
 /* 表格样式 */
@@ -198,7 +224,7 @@ body,
 /* 选中文字样式 */
 ::selection {
   background: var(--primary-color);
-  color: #fff;
+  color: var(--bg-white);
 }
 
 /* ========== 毕业设计级别UI增强 ========== */
@@ -212,7 +238,6 @@ body,
   border-color: var(--primary-color) !important;
 }
 
-/* 选择框优化 */
 .el-select .el-input.is-focus .el-input__wrapper {
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2) !important;
 }
@@ -230,18 +255,18 @@ body,
 
 /* 表格增强 */
 .el-table {
-  --el-table-border-color: #f0f2f5;
-  --el-table-header-bg-color: #fafbfc;
+  --el-table-border-color: var(--border-lighter);
+  --el-table-header-bg-color: var(--bg-white);
 }
 
 .el-table th.el-table__cell {
-  background: linear-gradient(135deg, #f8f9fc 0%, #f4f6f9 100%) !important;
-  color: #606266;
+  background: linear-gradient(135deg, var(--bg-table-header-from) 0%, var(--bg-table-header-to) 100%) !important;
+  color: var(--text-regular);
   font-weight: 600;
 }
 
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
-  background: #fafbfc;
+  background: var(--bg-table-striped);
 }
 
 /* 对话框增强 */
@@ -289,7 +314,7 @@ body,
 
 /* 骨架屏优化 */
 .el-skeleton__item {
-  background: linear-gradient(90deg, #f0f2f5 25%, #e6e8eb 50%, #f0f2f5 75%);
+  background: linear-gradient(90deg, var(--bg-skeleton-start) 25%, var(--bg-skeleton-mid) 50%, var(--bg-skeleton-start) 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s infinite;
 }
@@ -316,7 +341,7 @@ body,
 
 /* 开关优化 */
 .el-switch.is-checked .el-switch__core {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
   border-color: transparent;
 }
 
@@ -327,12 +352,12 @@ body,
 
 /* 步骤条优化 */
 .el-step__head.is-finish {
-  color: #67c23a;
-  border-color: #67c23a;
+  color: var(--success-color);
+  border-color: var(--success-color);
 }
 
 .el-step__title.is-finish {
-  color: #67c23a;
+  color: var(--success-color);
 }
 
 /* 折叠面板优化 */
@@ -351,7 +376,7 @@ body,
 
 /* 分割线优化 */
 .el-divider {
-  background: linear-gradient(90deg, transparent, #e4e7ed, transparent);
+  background: linear-gradient(90deg, transparent, var(--border-light), transparent);
 }
 
 .el-divider--horizontal {
@@ -380,7 +405,7 @@ body,
 
 /* 时间线优化 */
 .el-timeline-item__node {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
 }
 
 /* 回到顶部 */

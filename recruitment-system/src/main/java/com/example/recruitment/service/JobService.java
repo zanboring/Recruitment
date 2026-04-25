@@ -4,6 +4,7 @@ import com.example.recruitment.dto.JobQueryDTO;
 import com.example.recruitment.entity.Job;
 import com.example.recruitment.vo.AIFeedbackVO;
 import com.example.recruitment.vo.JobStatVO;
+import com.example.recruitment.vo.JobTrendVO;
 import com.github.pagehelper.PageInfo;
 
 import java.math.BigDecimal;
@@ -36,6 +37,8 @@ public interface JobService {
     List<JobStatVO> statByStatus();
 
     List<JobStatVO> statTopTitles();
+
+    JobTrendVO jobTrendLast7Days();
 
     BigDecimal predictSalary(String city, String experience, String education, String skills);
 

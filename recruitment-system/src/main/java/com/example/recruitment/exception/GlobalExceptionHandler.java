@@ -3,11 +3,13 @@ package com.example.recruitment.exception;
 import com.example.recruitment.common.Result;
 import com.example.recruitment.common.ResultCode;
 import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -32,7 +34,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception e) {
-        e.printStackTrace();
+        log.error("服务器未预期异常", e);
         return Result.failed(ResultCode.SERVER_ERROR, "服务器异常");
     }
 }
