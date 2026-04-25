@@ -50,7 +50,6 @@ public class CrawlServiceImpl implements CrawlService {
 
     // 数据质量过滤阈值
     private static final BigDecimal MAX_SALARY_THRESHOLD = new BigDecimal("30000");
-    private static final int MAX_EXPERIENCE_YEARS = 5;
 
     @Value("${crawl.enable-backup-data:true}")
     private boolean enableBackupData;

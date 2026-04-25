@@ -5,11 +5,7 @@
  * 包含：标题、段落、列表、代码块、表格、引用块等自定义渲染
  * 所有颜色值均使用 CSS 变量（通过 getComputedStyle 获取）
  */
-import { marked } from 'marked';
-
-// 启用 GFM（GitHub Flavored Markdown）语法支持
-// marked v12+ 内置 GFM，无需额外安装 marked-gfm
-marked.use(marked.gfm ? marked.gfm() : {});
+import { marked, Renderer } from 'marked';
 
 /**
  * 从 CSS 变量获取实际颜色值
@@ -23,11 +19,11 @@ function cssVar(name: string, fallback: string): string {
 }
 
 /** 创建并返回配置好的 marked 渲染器实例 */
-export function createMarkdownRenderer(): marked.Renderer {
-  const renderer = new marked.Renderer();
+export function createMarkdownRenderer(): Renderer {
+  const renderer = new Renderer();
 
   // 标题渲染 - 带 emoji + 渐变下划线
-  renderer.heading = function({ tokens, depth }: { tokens: any[]; depth: number }) {
+  renderer.heading = function(tokens, depth) {
     const text = this.parser.parseInline(tokens);
     const emojis = ['\uD83D\uDCA1', '\uD83D\uDCCA', '\uD83C\uDFAF', '\uD83D\uDCB0', '\uD83D\uDD25', '\u2B50', '\u2705'];
     const emoji = emojis[Math.min(depth - 1, emojis.length - 1)] || '\uD83D\uDCCC';
@@ -37,76 +33,54 @@ export function createMarkdownRenderer(): marked.Renderer {
   };
 
   // 段落渲染
-  renderer.paragraph = function({ tokens }: { tokens: any[] }) {
+  renderer.paragraph = function(tokens) {
     const text = this.parser.parseInline(tokens);
     const txtClr = cssVar('--md-body-text', '#3d3d3d');
     return `<p style="margin:10px 0;line-height:1.7;color:${txtClr};">${text}</p>`;
   };
 
   // 列表渲染
-  renderer.list = function({ items, ordered }: { items: any[]; ordered: boolean }) {
+  renderer.list = function(body, ordered) {
     const tag = ordered ? 'ol' : 'ul';
-    const listItems = items.map(item =>
-      `<li style="margin:4px 0;line-height:1.7;">${item.text || ''}</li>`
-    ).join('');
-    return `<${tag} style="padding-left:20px;margin:8px 0;list-style-position:outside;">${listItems}</${tag}>`;
+    return `<${tag} style="padding-left:20px;margin:8px 0;list-style-position:outside;">${body}</${tag}>`;
   };
 
   // 代码块渲染（暗色主题风格）
-  renderer.code = function({ text, lang }: { text: string; lang?: string }) {
-    const language = lang || '';
+  renderer.code = function(code, infostring) {
+    const language = infostring || '';
     const bgCode = cssVar('--bg-code', '#f5f7fa');
     const primary = cssVar('--primary-color', '#667eea');
     const codeAccent = cssVar('--md-code-accent', '#e83e8c');
-    return `<pre style="background:${bgCode};border-radius:8px;padding:12px;overflow-x:auto;margin:10px 0;border-left:4px solid ${primary};"><code class="language-${language}" style="font-family:'Fira Code',Consolas,Monaco,monospace;font-size:13px;color:${codeAccent};background:transparent;">${text}</code></pre>`;
-  };
-
-  // 行内代码渲染
-  renderer.inlineCode = function({ text }: { text: string }) {
-    const bgInline = cssVar('--bg-code-inline', '#f0f0f5');
-    const codeAccent = cssVar('--md-code-accent', '#e83e8c');
-    return `<code style="background:${bgInline};padding:2px 6px;border-radius:4px;font-family:'Fira Code',Consolas,Monaco';font-size:13px;color:${codeAccent};font-weight:500;">${text}</code>`;
+    return `<pre style="background:${bgCode};border-radius:8px;padding:12px;overflow-x:auto;margin:10px 0;border-left:4px solid ${primary};"><code class="language-${language}" style="font-family:'Fira Code',Consolas,Monaco,monospace;font-size:13px;color:${codeAccent};background:transparent;">${code}</code></pre>`;
   };
 
   // 表格渲染（渐变表头 + 斑马纹行）
-  renderer.table = function({ header, rows }: { header: any[]; rows: any[][] }) {
+  renderer.table = function(header, body) {
+    const primary = cssVar('--primary-color', '#667eea');
+    const primaryLight = cssVar('--primary-light', '#764ba2');
+    const bgWhite = cssVar('--bg-white', '#fff');
+    const bgAlt = cssVar('--bg-table-alt', '#f8f9fc');
+    const tableTxt = cssVar('--md-table-text', '#555');
+    const tblBorder = cssVar('--md-table-border', '#eee');
+    
     let html = '<div style="overflow-x:auto;margin:10px 0;"><table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">';
     if (header) {
-      const primary = cssVar('--primary-color', '#667eea');
-      const primaryLight = cssVar('--primary-light', '#764ba2');
-      html += `<thead><tr style="background:linear-gradient(135deg, ${primary}, ${primaryLight});color:#fff;">`;
-      for (const cell of header) {
-        html += `<th style="padding:10px 14px;text-align:left;font-weight:600;font-size:13px;border:none;">${cell.text || ''}</th>`;
-      }
-      html += '</tr></thead>';
+      html += `<thead><tr style="background:linear-gradient(135deg, ${primary}, ${primaryLight});color:#fff;">${header}</tr></thead>`;
     }
-    html += '<tbody>';
-    for (let i = 0; i < rows.length; i++) {
-      const bgWhite = cssVar('--bg-white', '#fff');
-      const bgAlt = cssVar('--bg-table-alt', '#f8f9fc');
-      const bg = i % 2 === 0 ? bgWhite : bgAlt;
-      const tableTxt = cssVar('--md-table-text', '#555');
-      const tblBorder = cssVar('--md-table-border', '#eee');
-      html += `<tr style="background:${bg};">`;
-      for (const cell of rows[i]) {
-        html += `<td style="padding:9px 14px;font-size:13px;color:${tableTxt};border-bottom:1px solid ${tblBorder};">${cell.text || ''}</td>`;
-      }
-      html += '</tr>';
-    }
-    html += '</tbody></table></div>';
+    html += `<tbody>${body}</tbody></table></div>`;
     return html;
   };
 
   // 引用块渲染（左侧蓝紫色渐变条）
-  renderer.blockquote = function({ text }: { text: string }) {
+  renderer.blockquote = function(quote) {
     const primary = cssVar('--primary-color', '#667eea');
     const bgBq = cssVar('--bg-blockquote', '#f8f9ff');
     const bqTxt = cssVar('--md-blockquote-text', '#556680');
-    return `<blockquote style="border-left:4px solid ${primary};padding:10px 16px;margin:10px 0;background:${bgBq};border-radius:0 8px 8px 0;color:${bqTxt};font-style:italic;">${text}</blockquote>`;
+    return `<blockquote style="border-left:4px solid ${primary};padding:10px 16px;margin:10px 0;background:${bgBq};border-radius:0 8px 8px 0;color:${bqTxt};font-style:italic;">${quote}</blockquote>`;
   };
 
   // 粗体渲染（暖色高亮背景）
-  renderer.strong = function({ text }: { text: string }) {
+  renderer.strong = function(text) {
     const strongClr = cssVar('--md-strong-color', '#e65100');
     const bgWarm = cssVar('--bg-highlight-warm', '#fff7ed');
     const bgYel = cssVar('--bg-highlight-yellow', '#fffbe6');
@@ -114,7 +88,7 @@ export function createMarkdownRenderer(): marked.Renderer {
   };
 
   // 图片渲染
-  renderer.image = function({ href, title, text }: { href: string; title?: string; text?: string }) {
+  renderer.image = function(href, title, text) {
     return `<img src="${href}" alt="${text || ''}" title="${title || ''}" style="max-width:100%;border-radius:8px;margin:10px 0;box-shadow:0 2px 8px rgba(0,0,0,0.1);">`;
   };
 
@@ -122,7 +96,7 @@ export function createMarkdownRenderer(): marked.Renderer {
 }
 
 /** 预创建的渲染器单例，避免每次渲染都重新创建 */
-export const mdRendererInstance: marked.Renderer = createMarkdownRenderer();
+export const mdRendererInstance: Renderer = createMarkdownRenderer();
 
 /**
  * 将 Markdown 文本渲染为 HTML 字符串

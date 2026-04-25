@@ -4,7 +4,7 @@ import com.example.recruitment.dto.JobQueryDTO;
 import com.example.recruitment.entity.Job;
 import com.example.recruitment.exception.BusinessException;
 import com.example.recruitment.mapper.JobMapper;
-import com.example.recruitment.service.AIService;
+
 import com.example.recruitment.service.JobService;
 import com.example.recruitment.vo.AIFeedbackVO;
 import com.example.recruitment.vo.JobTrendVO;
@@ -27,7 +27,6 @@ import java.util.stream.Collectors;
 public class JobServiceImpl implements JobService {
 
     private final JobMapper jobMapper;
-    private final AIService aiService;
 
     // 热门技能权重配置（扩展版 - 与爬虫技能词库对齐）
     private static final Map<String, Integer> SKILL_WEIGHTS = new HashMap<>();
@@ -586,7 +585,10 @@ public class JobServiceImpl implements JobService {
         if (max != null) {
             return max.setScale(0, RoundingMode.HALF_UP) + "元/月以下";
         }
-        return min.setScale(0, RoundingMode.HALF_UP) + "元/月以上";
+        if (min != null) {
+            return min.setScale(0, RoundingMode.HALF_UP) + "元/月以上";
+        }
+        return "薪资面议";
     }
 
     private String generateRecommendReason(Job job) {

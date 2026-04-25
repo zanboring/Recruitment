@@ -1,12 +1,10 @@
 package com.example.recruitment.controller;
 
 import com.example.recruitment.common.Result;
-import com.example.recruitment.config.JwtAuthFilter;
 import com.example.recruitment.dto.ChangePasswordDTO;
 import com.example.recruitment.dto.UserLoginDTO;
 import com.example.recruitment.dto.UserRegisterDTO;
 import com.example.recruitment.service.UserService;
-import com.example.recruitment.util.JwtUtil;
 import com.example.recruitment.vo.UserVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,7 +24,6 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final UserService userService;
-    private final JwtUtil jwtUtil;
 
     @PostMapping("/login")
     @Operation(summary = "用户登录", description = "用户使用用户名和密码登录系统，返回JWT Token")
