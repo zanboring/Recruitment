@@ -4,7 +4,7 @@ import com.example.recruitment.dto.JobQueryDTO;
 import com.example.recruitment.entity.Job;
 import com.example.recruitment.exception.BusinessException;
 import com.example.recruitment.mapper.JobMapper;
-
+import com.example.recruitment.service.AIService;
 import com.example.recruitment.service.JobService;
 import com.example.recruitment.vo.AIFeedbackVO;
 import com.example.recruitment.vo.JobTrendVO;
@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 public class JobServiceImpl implements JobService {
 
     private final JobMapper jobMapper;
+    private final AIService aiService;
 
     // 热门技能权重配置（扩展版 - 与爬虫技能词库对齐）
     private static final Map<String, Integer> SKILL_WEIGHTS = new HashMap<>();
@@ -512,17 +513,131 @@ public class JobServiceImpl implements JobService {
     }
 
     /**
-     * 调用智谱AI生成专业的数据分析报告
-     * 将规则引擎聚合的数据作为上下文发送给AI，让AI生成自然语言分析
+     * 根据环境变量配置自动选择AI或规则引擎生成分析报告
+     * 如果配置了ZHIPUAI_API_KEY环境变量，则使用智谱AI；否则使用规则引擎
      */
     private String generateAIAnalysisReport(List<Job> jobs, String hotCity, String hotSkill,
                                             String hotTitle, List<AIFeedbackVO.QualityJob> qualityJobs,
                                             List<AIFeedbackVO.SkillDemand> skillDemands,
                                             AIFeedbackVO.SalaryAnalysis salaryAnalysis,
                                             String trendText) {
-        // 直接使用规则引擎生成摘要
-        log.info("使用规则引擎生成分析摘要");
-        return buildRuleBasedSummary(jobs.size(), hotCity, hotSkill, hotTitle, salaryAnalysis, trendText);
+        // 根据环境变量配置自动选择
+        if (aiService.isApiKeyConfigured()) {
+            log.info("检测到ZHIPUAI_API_KEY环境变量，使用智谱AI生成分析报告");
+            return generateAIAnalysisWithAI(jobs, hotCity, hotSkill, hotTitle, qualityJobs, 
+                                            skillDemands, salaryAnalysis, trendText);
+        } else {
+            log.info("未配置ZHIPUAI_API_KEY环境变量，使用规则引擎生成分析报告");
+            return buildRuleBasedSummary(jobs.size(), hotCity, hotSkill, hotTitle, salaryAnalysis, trendText);
+        }
+    }
+
+    /**
+     * 调用智谱AI生成专业的数据分析报告
+     */
+    private String generateAIAnalysisWithAI(List<Job> jobs, String hotCity, String hotSkill,
+                                            String hotTitle, List<AIFeedbackVO.QualityJob> qualityJobs,
+                                            List<AIFeedbackVO.SkillDemand> skillDemands,
+                                            AIFeedbackVO.SalaryAnalysis salaryAnalysis,
+                                            String trendText) {
+        try {
+            StringBuilder dataContext = new StringBuilder();
+            dataContext.append("请根据以下招聘数据进行专业分析，生成一份结构化的分析报告。\n\n");
+            
+            dataContext.append("【基础数据概况】\n");
+            dataContext.append("- 样本总量：").append(jobs.size()).append("个岗位\n");
+            dataContext.append("- 热门城市：").append(hotCity).append("\n");
+            dataContext.append("- 热门技能：").append(hotSkill).append("\n");
+            dataContext.append("- 热门岗位：").append(hotTitle).append("\n");
+            dataContext.append("- 平均薪资：").append(salaryAnalysis.getAvgSalary()).append("\n");
+            dataContext.append("- 最高薪资：").append(salaryAnalysis.getTopSalary()).append("\n");
+            dataContext.append("- 薪资区间：").append(salaryAnalysis.getSalaryRange()).append("\n\n");
+
+            dataContext.append("【优质岗位推荐TOP5】\n");
+            for (int i = 0; i < Math.min(5, qualityJobs.size()); i++) {
+                AIFeedbackVO.QualityJob j = qualityJobs.get(i);
+                dataContext.append(String.format("%d. %s - %s (%s) [%s]\n",
+                        i + 1, j.getTitle(), j.getCompanyName(), j.getSalary(), j.getCity()));
+            }
+            dataContext.append("\n");
+
+            dataContext.append("【技能需求排名】\n");
+            for (int i = 0; i < Math.min(8, skillDemands.size()); i++) {
+                AIFeedbackVO.SkillDemand sd = skillDemands.get(i);
+                dataContext.append(String.format("%d. %s: %d个岗位(%s)\n",
+                        i + 1, sd.getSkill(), sd.getCount(), sd.getLevel()));
+            }
+            dataContext.append("\n");
+
+            dataContext.append("【趋势概述】").append(trendText).append("\n\n");
+
+            Map<String, Long> eduCount = jobs.stream()
+                    .filter(j -> j.getEducation() != null)
+                    .collect(Collectors.groupingBy(Job::getEducation, Collectors.counting()));
+            if (!eduCount.isEmpty()) {
+                dataContext.append("【学历要求分布】\n");
+                eduCount.entrySet().stream()
+                        .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                        .forEach(e -> dataContext.append("- ").append(e.getKey()).append(": ").append(e.getValue()).append("个\n"));
+                dataContext.append("\n");
+            }
+
+            Map<String, Long> expCount = jobs.stream()
+                    .filter(j -> j.getExperience() != null)
+                    .collect(Collectors.groupingBy(Job::getExperience, Collectors.counting()));
+            if (!expCount.isEmpty()) {
+                dataContext.append("【经验要求分布】\n");
+                expCount.entrySet().stream()
+                        .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                        .forEach(e -> dataContext.append("- ").append(e.getKey()).append(": ").append(e.getValue()).append("个\n"));
+                dataContext.append("\n");
+            }
+
+            dataContext.append("""
+                    请按以下格式输出分析报告（使用Markdown格式）：
+                    
+                    ## 📊 数据总览
+                    （简要总结整体情况）
+                    
+                    ## 🏙️ 城市与薪资分析
+                    （分析各城市就业机会和薪资水平）
+                    
+                    ## 💻 技能与岗位洞察
+                    （分析热门技能的市场需求和前景）
+                    
+                    ## 💡 求职建议
+                    （给出3-5条具体可执行的建议）
+                    
+                    请确保分析有据可依，基于上述真实数据。
+                    """);
+
+            String analysisSystemPrompt = """
+                    你是一位资深招聘市场数据分析师，擅长从招聘数据中发现趋势、洞察机会。
+                    你需要基于用户提供的数据进行客观、专业的分析，给出有价值的求职建议。
+                    回答使用中文，采用Markdown格式，适当使用emoji增强可读性。
+                    
+                    【输出格式规范】
+                    - 使用 ## 作为主标题，### 作为子标题
+                    - 使用 **粗体** 强调关键数据
+                    - 使用表格展示对比数据
+                    - 使用列表展示要点
+                    - 每段之间空行，保持段落简洁
+                    """;
+
+            String aiResponse = aiService.chatSync(analysisSystemPrompt, dataContext.toString());
+
+            if (aiResponse != null && !aiResponse.isBlank()) {
+                log.info("AI分析报告生成成功，长度: {}", aiResponse.length());
+                return aiResponse;
+            } else {
+                log.warn("AI返回空结果，回退到规则引擎摘要");
+                return buildRuleBasedSummary(jobs.size(), hotCity, hotSkill, hotTitle, salaryAnalysis, trendText);
+            }
+
+        } catch (Exception e) {
+            log.error("AI分析报告生成失败，回退到规则引擎: {}", e.getMessage());
+            return buildRuleBasedSummary(jobs.size(), hotCity, hotSkill, hotTitle, salaryAnalysis, trendText);
+        }
     }
 
     /**
