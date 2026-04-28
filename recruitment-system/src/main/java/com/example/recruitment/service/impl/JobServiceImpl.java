@@ -406,7 +406,7 @@ public class JobServiceImpl implements JobService {
                 .filter(j -> j.getCity() != null && !j.getCity().isBlank() && !j.getCity().equals("未知"))
                 .collect(Collectors.groupingBy(Job::getCity, Collectors.counting()));
         String hotCity = cityCount.isEmpty() ? "暂无数据" :
-                cityCount.entrySet().stream().max(Map.Entry.comparingByValue()).get().getKey();
+                cityCount.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
         trend.setHotCity(hotCity);
 
         Map<String, Long> skillCount = new HashMap<>();
@@ -418,14 +418,14 @@ public class JobServiceImpl implements JobService {
             }
         }
         String hotSkill = skillCount.isEmpty() ? "暂无数据" :
-                skillCount.entrySet().stream().max(Map.Entry.comparingByValue()).get().getKey();
+                skillCount.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
         trend.setHotSkill(hotSkill);
 
         Map<String, Long> titleCount = jobs.stream()
                 .filter(j -> j.getTitle() != null && !j.getTitle().isBlank())
                 .collect(Collectors.groupingBy(Job::getTitle, Collectors.counting()));
         String hotTitle = titleCount.isEmpty() ? "暂无数据" :
-                titleCount.entrySet().stream().max(Map.Entry.comparingByValue()).get().getKey();
+                titleCount.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
         trend.setHotTitle(hotTitle);
 
         String trendText = String.format("当前热门城市为%s，热门技能为%s，热门岗位为%s。",
@@ -756,7 +756,7 @@ public class JobServiceImpl implements JobService {
         if (!eduCount.isEmpty()) {
             String topEdu = eduCount.entrySet().stream()
                     .max(Map.Entry.comparingByValue())
-                    .get().getKey();
+                    .orElseThrow().getKey();
             suggestions.add(String.format("当前%s学历岗位占比最高，建议根据自身情况合理定位。", topEdu));
         }
 
@@ -767,7 +767,7 @@ public class JobServiceImpl implements JobService {
         if (!expCount.isEmpty()) {
             String topExp = expCount.entrySet().stream()
                     .max(Map.Entry.comparingByValue())
-                    .get().getKey();
+                    .orElseThrow().getKey();
             suggestions.add(String.format("市场对%s经验的需求最大，建议积累相应项目经验。", topExp));
         }
 

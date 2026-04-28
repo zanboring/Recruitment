@@ -42,18 +42,21 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        if (request == null || response == null || filterChain == null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        
         try {
             String token = extractToken(request);
 
-            if (StringUtils.hasText(token) && jwtUtil.validateToken(token)) {
+            if (StringUtils.hasText(token) && jwtUtil != null && jwtUtil.validateToken(token)) {
                 Long userId = jwtUtil.getUserIdFromToken(token);
                 String username = jwtUtil.getUsernameFromToken(token);
                 String role = jwtUtil.getRoleFromToken(token);
 
-                // 根据角色构建权限列表（Spring Security 需要非空权限列表）
-                // ADMIN 用户拥有所有权限，USER/其他角色拥有基础权限
                 List<GrantedAuthority> authorities;
-                if ("ADMIN".equalsIgnoreCase(role) || "admin".equals(role)) {
+                if (role != null && ("ADMIN".equalsIgnoreCase(role) || "admin".equals(role))) {
                     authorities = AuthorityUtils.createAuthorityList(
                         "ROLE_ADMIN", "ROLE_USER",
                         "job:write", "job:delete",
@@ -67,7 +70,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         new UsernamePasswordAuthenticationToken(userId, null, authorities);
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
-                // 将认证信息存入SecurityContext，后续Controller可通过SecurityContext获取当前用户ID
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception e) {
