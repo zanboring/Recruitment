@@ -1,6 +1,5 @@
 package com.example.recruitment.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -30,8 +29,11 @@ import java.util.Arrays;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Autowired
-    private JwtAuthFilter jwtAuthFilter;
+    private final JwtAuthFilter jwtAuthFilter;
+
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -64,6 +66,8 @@ public class SecurityConfig {
                         // ===== 公开接口（无需Token）=====
                         // 登录/注册
                         .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
+                        // 模型状态接口
+                        .requestMatchers("/api/model/status", "/api/model/health").permitAll()
                         // Swagger文档（开发环境）
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // CORS预检请求

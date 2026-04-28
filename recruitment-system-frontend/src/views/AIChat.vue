@@ -2,7 +2,10 @@
   <div class="ai-chat-container">
     <el-card class="ai-chat-card">
       <template #header>
-        <ChatHeader @show-about="showAbout" />
+        <div class="header-content">
+          <ChatHeader @show-about="showAbout" />
+          <ModelSwitch />
+        </div>
       </template>
 
       <!-- 聊天记录 -->
@@ -78,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed } from 'vue';
+import { ref, nextTick, computed, onMounted } from 'vue';
 
 // 组件名称（用于 keep-alive include 匹配）
 defineOptions({ name: 'AIChat' });
@@ -86,15 +89,18 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { ChatDotRound, ChatLineSquare } from '@element-plus/icons-vue';
 import { useUserStore } from '@/store/user';
 import { useChatStore } from '@/store/chat';
+import { useModelStore } from '@/store/model';
 
 // 子组件
 import ChatHeader from './components/ChatHeader.vue';
 import ChatMessageList from './components/ChatMessageList.vue';
 import ChatInput from './components/ChatInput.vue';
+import ModelSwitch from './components/ModelSwitch.vue';
 
 // Store
 const userStore = useUserStore();
 const chatStore = useChatStore();
+const modelStore = useModelStore();
 
 // 从 store 读取响应式状态
 const messages = computed(() => chatStore.messages);
@@ -121,6 +127,11 @@ const commonQuestions = [
   '如何提高简历通过率？',
   '长沙的IT行业发展趋势' 
 ];
+
+// 页面加载时获取模型状态
+onMounted(() => {
+  modelStore.fetchStatus();
+});
 
 // 滚动到底部
 const scrollToBottom = () => {
@@ -160,14 +171,16 @@ const handleSend = async (messageText?: string) => {
   const aiIndex = chatStore.createAiPlaceholder();
 
   try {
-    const response = await fetch('/api/ai/stream', {
+    // 使用智能路由接口，支持主API和小模型切换
+    const response = await fetch('/api/model/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${userStore.token}`
       },
       body: JSON.stringify({
-        message: actualContent
+        message: actualContent,
+        useLocalModel: modelStore.shouldUseLocalModel()
       })
     });
 
@@ -185,32 +198,39 @@ const handleSend = async (messageText?: string) => {
       return;
     }
 
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-
-    if (reader) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          const trimmedLine = line.trim();
-          // 解析 SSE data 行
-          if (trimmedLine.startsWith('data:')) {
-            const data = trimmedLine.slice(5).trim();
-            if (data && data !== '[DONE]') {
-              chatStore.appendAiContent(aiIndex, data);
-              await nextTick();
-              scrollToBottom();
-              // 控制输出速度，确保匀速显示
-              await new Promise(resolve => setTimeout(resolve, 50));
-            }
-          }
+    // 解析 JSON 响应
+    const result = await response.json();
+    
+    if (result.code === 0 && result.data) {
+      const responseData = result.data;
+      const aiResponse = responseData.response || '暂无回复';
+      
+      // 模拟流式输出效果
+      let currentIndex = 0;
+      const displayResponse = () => {
+        if (currentIndex < aiResponse.length) {
+          // 每次添加一个字符
+          chatStore.appendAiContent(aiIndex, aiResponse[currentIndex]);
+          currentIndex++;
+          nextTick().then(() => {
+            scrollToBottom();
+            // 控制输出速度
+            setTimeout(displayResponse, 30);
+          });
+        }
+      };
+      displayResponse();
+      
+      // 显示使用的模型
+      if (responseData.usedModel) {
+        console.log(`使用模型: ${responseData.usedModel}`);
+        if (responseData.fallback) {
+          ElMessage.warning('主API不可用，已自动切换到小模型');
         }
       }
+    } else {
+      chatStore.setAiError(aiIndex, '[错误] ' + (result.msg || '获取响应失败'));
+      chatStore.setError(result.msg || '获取响应失败');
     }
   } catch (err: any) {
     // 网络中断等异常
@@ -273,6 +293,13 @@ const showAbout = () => {
   &:hover {
     box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15);
   }
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .common-questions {

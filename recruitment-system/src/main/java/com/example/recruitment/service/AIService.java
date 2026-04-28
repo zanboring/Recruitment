@@ -40,9 +40,11 @@ public class AIService {
 
     private static final String API_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
     private static final String DEFAULT_MODEL = "glm-4";
-    private static final int CONNECT_TIMEOUT_MS = 15000;
-    private static final int READ_TIMEOUT_SYNC_MS = 60000;
-    private static final int READ_TIMEOUT_STREAM_MS = 120000;
+    private static final int CONNECT_TIMEOUT_MS = 30000;
+    private static final int READ_TIMEOUT_SYNC_MS = 120000;
+    private static final int READ_TIMEOUT_STREAM_MS = 180000;
+    private static final int MAX_RETRY_COUNT = 2;
+    private static final long RETRY_DELAY_MS = 2000;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -54,7 +56,7 @@ public class AIService {
     }
 
     /**
-     * 同步调用智谱AI
+     * 同步调用智谱AI（带重试机制）
      *
      * @param systemPrompt 系统提示词（定义AI角色和行为）
      * @param userMessage 用户消息
@@ -66,6 +68,29 @@ public class AIService {
             throw new IllegalStateException("未配置智谱AI API Key，请设置环境变量 ZHIPUAI_API_KEY");
         }
 
+        Exception lastException = null;
+        
+        for (int attempt = 1; attempt <= MAX_RETRY_COUNT; attempt++) {
+            try {
+                return chatSyncInternal(systemPrompt, userMessage);
+            } catch (Exception e) {
+                lastException = e;
+                log.warn("AI调用第{}次失败: {}", attempt, e.getMessage());
+                
+                if (attempt < MAX_RETRY_COUNT) {
+                    log.info("等待{}ms后进行第{}次重试...", RETRY_DELAY_MS, attempt + 1);
+                    Thread.sleep(RETRY_DELAY_MS);
+                }
+            }
+        }
+        
+        throw new Exception("AI调用失败，已重试" + MAX_RETRY_COUNT + "次: " + lastException.getMessage(), lastException);
+    }
+
+    /**
+     * 内部同步调用方法（不带重试）
+     */
+    private String chatSyncInternal(String systemPrompt, String userMessage) throws Exception {
         HttpURLConnection connection = createConnection(false);
         String requestBody = buildRequestBody(systemPrompt, userMessage, false);
 
@@ -185,10 +210,20 @@ public class AIService {
      */
     private String parseSyncResponse(String responseBody) {
         try {
+            if (responseBody == null || responseBody.isBlank()) {
+                log.warn("响应体为空");
+                return "";
+            }
             JsonNode root = objectMapper.readTree(responseBody);
             JsonNode choices = root.path("choices");
             if (choices.isArray() && !choices.isEmpty()) {
-                return choices.get(0).path("message").path("content").asText("");
+                JsonNode firstChoice = choices.get(0);
+                if (firstChoice != null) {
+                    JsonNode message = firstChoice.path("message");
+                    if (message != null && !message.isMissingNode()) {
+                        return message.path("content").asText("");
+                    }
+                }
             }
         } catch (Exception e) {
             log.warn("标准JSON解析失败: {}", e.getMessage());

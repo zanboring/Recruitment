@@ -62,4 +62,21 @@ public class Job {
     public void setLastSeenAt(LocalDateTime lastSeenAt) { this.lastSeenAt = lastSeenAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    
+    /**
+     * 获取薪资范围字符串（如 "15-25K"）
+     */
+    public String getSalary() {
+        if (minSalary != null && maxSalary != null) {
+            String unit = salaryUnit != null ? salaryUnit : "K";
+            return minSalary.intValue() + "-" + maxSalary.intValue() + unit;
+        } else if (minSalary != null) {
+            String unit = salaryUnit != null ? salaryUnit : "K";
+            return minSalary.intValue() + unit;
+        } else if (maxSalary != null) {
+            String unit = salaryUnit != null ? salaryUnit : "K";
+            return maxSalary.intValue() + unit;
+        }
+        return null;
+    }
 }
