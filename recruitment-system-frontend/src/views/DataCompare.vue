@@ -111,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, computed } from 'vue';
 import * as echarts from 'echarts';
 import { ElMessage } from 'element-plus';
 import {
@@ -203,7 +203,7 @@ const loadData = async () => {
     tableData.value = data.map((item) => ({
       ...item,
       name: labelMap[item.name] || item.name,
-      percentage: total > 0 ? ((item.count || 0) / total * 100).toFixed(2) : 0
+      percentage: total > 0 ? Number(((item.count || 0) / total * 100).toFixed(2)) : 0
     }));
 
     updateChart();
@@ -332,6 +332,24 @@ const exportData = () => {
 
 onMounted(() => {
   loadData();
+  // [优化] 监听窗口 resize，自动调整图表大小
+  window.addEventListener('resize', handleChartResize);
+});
+
+// [优化] 窗口 resize 处理函数
+const handleChartResize = () => {
+  if (chartInstance && !chartInstance.isDisposed()) {
+    chartInstance.resize();
+  }
+};
+
+// [优化] 组件卸载时释放图表实例，防止内存泄漏
+onUnmounted(() => {
+  window.removeEventListener('resize', handleChartResize);
+  if (chartInstance && !chartInstance.isDisposed()) {
+    chartInstance.dispose();
+    chartInstance = null;
+  }
 });
 </script>
 

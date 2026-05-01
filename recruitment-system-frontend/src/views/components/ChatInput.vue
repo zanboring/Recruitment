@@ -16,14 +16,14 @@
         <div class="toolbar-left">
           <el-tooltip content="按Enter发送" placement="top">
             <el-button 
-              type="text" 
+              link 
               icon="ChatLineSquare"
               class="toolbar-button"
             />
           </el-tooltip>
           <el-tooltip content="清空输入" placement="top">
             <el-button 
-              type="text" 
+              link 
               icon="Delete"
               class="toolbar-button"
               @click="inputMessage = ''"

@@ -25,7 +25,7 @@
             <el-button type="danger" size="small" @click="clearCities">清空</el-button>
           </div>
           <el-checkbox-group v-model="crawlForm.cities" style="margin-top: 10px">
-            <el-checkbox v-for="city in cityOptions" :key="city.value" :label="city.value" style="margin-right: 15px; margin-bottom: 10px;">{{ city.label }}</el-checkbox>
+            <el-checkbox v-for="city in cityOptions" :key="city.value" :value="city.value" style="margin-right: 15px; margin-bottom: 10px;">{{ city.label }}</el-checkbox>
           </el-checkbox-group>
         </div>
       </el-form-item>
@@ -74,6 +74,8 @@ const crawlForm = reactive({
   cities: [] as string[]
 });
 
+const submitLoading = ref(false);
+
 const selectAllCities = () => {
   crawlForm.cities = cityOptions.map(city => city.value);
 };
@@ -88,11 +90,14 @@ const clearCities = () => {
 };
 
 const createCrawlTask = async () => {
+  if (submitLoading.value) return;
+  
   if (!crawlForm.sourceSite || !crawlForm.keyword || crawlForm.cities.length === 0) {
     ElMessage.warning('请填写完整的任务信息');
     return;
   }
 
+  submitLoading.value = true;
   try {
     await http.post('/crawl/task', {
       ...crawlForm,
@@ -102,8 +107,10 @@ const createCrawlTask = async () => {
     visible.value = false;
     Object.assign(crawlForm, { sourceSite: '', keyword: '', cities: [] });
     emit('created');
-  } catch (error) {
+  } catch (error: unknown) {
     ElMessage.error('任务创建失败');
+  } finally {
+    submitLoading.value = false;
   }
 };
 </script>

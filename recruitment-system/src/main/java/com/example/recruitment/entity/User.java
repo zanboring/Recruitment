@@ -10,6 +10,8 @@ public class User {
     private String role;
     private String email;
     private LocalDateTime createdAt;
+    private Integer loginFailCount = 0;
+    private LocalDateTime lockedUntil;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -25,4 +27,8 @@ public class User {
     public void setEmail(String email) { this.email = email; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public Integer getLoginFailCount() { return loginFailCount; }
+    public void setLoginFailCount(Integer loginFailCount) { this.loginFailCount = loginFailCount; }
+    public LocalDateTime getLockedUntil() { return lockedUntil; }
+    public void setLockedUntil(LocalDateTime lockedUntil) { this.lockedUntil = lockedUntil; }
 }

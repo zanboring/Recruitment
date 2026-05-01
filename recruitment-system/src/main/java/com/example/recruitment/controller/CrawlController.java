@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -58,7 +59,7 @@ public class CrawlController {
         return Result.success(tasks);
     }
 
-    @PostMapping("/task/{id}/delete")
+    @DeleteMapping("/task/{id}")
     @Operation(summary = "删除爬虫任务", description = "删除指定的爬虫任务")
     @PreAuthorize("hasAuthority('crawl:manage') or hasRole('ADMIN')")
     public Result<Void> deleteTask(@PathVariable("id") Long id) {

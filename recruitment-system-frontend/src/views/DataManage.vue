@@ -67,8 +67,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import http from '@/api/http';
 
 // 子组件
@@ -81,6 +81,7 @@ import DataPreviewTable from './components/DataPreviewTable.vue';
 import CrawlTaskDialog from './components/CrawlTaskDialog.vue';
 import TaskLogDialog from './components/TaskLogDialog.vue';
 
+// 类型定义
 interface LogItem {
   type: 'info' | 'success' | 'warning' | 'error';
   time: string;
@@ -95,7 +96,7 @@ interface Task {
   status: string;
   jobCount: number;
   createdAt: string;
-  finishedAt?: string;
+  finishedAt: string;
   message?: string;
 }
 
@@ -113,6 +114,32 @@ interface Job {
   url?: string;
 }
 
+interface PageResult<T> {
+  list: T[];
+  total: number;
+}
+
+// 配置常量
+const CRAWL_CONFIG = {
+  defaultCities: ['长沙'] as const,
+  keywords: [
+    'Java后端', '运维', '软件测试', 'Python开发', '计算机相关',
+    '应届生', '校招', '25届', '26届', '无经验', '0-1年', '1-3年', '实习',
+  ] as const,
+  platforms: [
+    { name: 'BOSS', code: 'boss' },
+    { name: '智联招聘', code: 'zhaopin' },
+    { name: '前程无忧', code: '51job' },
+    { name: '猎聘', code: 'liepin' },
+    { name: '拉勾网', code: 'lagou' },
+    { name: '牛客网', code: 'nowcoder' },
+  ] as const,
+  maxPollRounds: 90,
+  pollIntervalMs: 8000,
+  delayBetweenSites: 3000,
+  maxLogCount: 200,
+} as const;
+
 // 状态
 const loading = ref(false);
 const previewLoading = ref(false);
@@ -125,7 +152,7 @@ const showCrawlDialog = ref(false);
 const showLogDialog = ref(false);
 const currentTask = ref<Task | null>(null);
 const crawlLogs = ref<LogItem[]>([]);
-const crawlLogPanelRef = ref<any>(null);
+const crawlLogPanelRef = ref<InstanceType<typeof CrawlLogPanel> | null>(null);
 const quickTaskIds = ref<number[]>([]);
 const quickPollTimer = ref<number | null>(null);
 const totalJobs = ref(0);
@@ -135,10 +162,16 @@ const totalTasks = ref(0);
 const crawlProgress = ref(0);
 const crawlStatus = ref('准备中');
 
-// 子组件需要访问的ref
-const logContentRef = ref<HTMLElement | null>(null);
+type LogType = 'info' | 'success' | 'warning' | 'error';
 
-const addLog = (type: string, message: string) => {
+const unwrapResponse = <T>(res: unknown): T => {
+  if (res && typeof res === 'object' && 'data' in (res as Record<string, unknown>)) {
+    return (res as { data: T }).data;
+  }
+  return res as T;
+};
+
+const addLog = (message: string, type: LogType = 'info') => {
   const now = new Date();
   const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
 
@@ -148,13 +181,19 @@ const addLog = (type: string, message: string) => {
     message
   });
 
-  if (crawlLogPanelRef.value?.logContentRef) {
-    setTimeout(() => {
-      if (crawlLogPanelRef.value?.logContentRef) {
-        crawlLogPanelRef.value.logContentRef.scrollTop = crawlLogPanelRef.value.logContentRef.scrollHeight;
-      }
-    }, 100);
+  if (crawlLogs.value.length > CRAWL_CONFIG.maxLogCount) {
+    crawlLogs.value.splice(0, crawlLogs.value.length - CRAWL_CONFIG.maxLogCount);
   }
+
+  nextTick(() => {
+    const el = crawlLogPanelRef.value?.logContentRef;
+    if (el) {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  });
 };
 
 const clearLogs = () => {
@@ -166,10 +205,11 @@ const loadData = async () => {
   loading.value = true;
   try {
     const res = await http.get('/crawl/tasks');
-    tasks.value = Array.isArray(res) ? res : (res?.list || res || []);
+    const data = unwrapResponse<Task[] | { list: Task[] }>(res);
+    tasks.value = Array.isArray(data) ? data : (data.list || []);
     totalTasks.value = tasks.value.length;
     await loadJobStats();
-  } catch (error) {
+  } catch (error: unknown) {
     ElMessage.error('加载任务列表失败');
   } finally {
     loading.value = false;
@@ -178,27 +218,17 @@ const loadData = async () => {
 
 const loadJobStats = async () => {
   try {
-    const res = await http.post('/jobs/page', {
-      pageNum: 1,
-      pageSize: 1
-    });
-    totalJobs.value = res?.total || 0;
+    const [totalRes, activeRes, offlineRes] = await Promise.all([
+      http.post('/jobs/page', { pageNum: 1, pageSize: 1 }),
+      http.post('/jobs/page', { pageNum: 1, pageSize: 1, status: 'ACTIVE' }),
+      http.post('/jobs/page', { pageNum: 1, pageSize: 1, status: 'OFFLINE' })
+    ]);
     
-    const activeRes = await http.post('/jobs/page', {
-      pageNum: 1,
-      pageSize: 1,
-      status: 'ACTIVE'
-    });
-    activeJobs.value = activeRes?.total || 0;
-    
-    const offlineRes = await http.post('/jobs/page', {
-      pageNum: 1,
-      pageSize: 1,
-      status: 'OFFLINE'
-    });
-    offlineJobs.value = offlineRes?.total || 0;
-  } catch (error) {
-    console.error('加载岗位统计失败:', error);
+    totalJobs.value = unwrapResponse<PageResult<Job>>(totalRes).total ?? 0;
+    activeJobs.value = unwrapResponse<PageResult<Job>>(activeRes).total ?? 0;
+    offlineJobs.value = unwrapResponse<PageResult<Job>>(offlineRes).total ?? 0;
+  } catch (error: unknown) {
+    ElMessage.warning('加载统计数据失败');
   }
 };
 
@@ -206,12 +236,13 @@ const loadPreviewData = async (query?: { keyword: string }) => {
   previewLoading.value = true;
   try {
     const res = await http.post('/jobs/page', {
-      keyword: query?.keyword || '',
+      keyword: query?.keyword ?? '',
       pageNum: 1,
       pageSize: 10
     });
-    previewData.value = res?.list || [];
-  } catch (error) {
+    const pageResult = unwrapResponse<PageResult<Job>>(res);
+    previewData.value = pageResult.list ?? [];
+  } catch (error: unknown) {
     ElMessage.error('加载数据预览失败');
   } finally {
     previewLoading.value = false;
@@ -230,23 +261,21 @@ const stopQuickPolling = () => {
   }
 };
 
-const updateQuickTasksStatus = async () => {
+const updateQuickTasksStatus = async (): Promise<Task[]> => {
   try {
     const res = await http.get('/crawl/tasks');
-    const allTasks = Array.isArray(res) ? res : (res?.list || res || []);
-    const quickTasks = allTasks.filter((t: any) => quickTaskIds.value.includes(t.id));
+    const data = unwrapResponse<Task[] | { list: Task[] }>(res);
+    const allTasks = Array.isArray(data) ? data : (data.list || []);
+    const quickTasks = allTasks.filter((t) => quickTaskIds.value.includes(t.id));
     
     tasks.value = tasks.value.map(task => {
-      const updatedTask = quickTasks.find((t: any) => t.id === task.id);
-      if (updatedTask && updatedTask.status !== task.status) {
-        return updatedTask;
-      }
-      return task;
+      const updatedTask = quickTasks.find((t) => t.id === task.id);
+      return updatedTask && updatedTask.status !== task.status ? updatedTask : task;
     });
     
     return quickTasks;
-  } catch (error) {
-    console.error('更新任务状态失败:', error);
+  } catch (error: unknown) {
+    ElMessage.warning('轮询任务状态失败，稍后重试');
     return [];
   }
 };
@@ -259,11 +288,12 @@ const startQuickPolling = () => {
     rounds++;
     try {
       const quickTasks = await updateQuickTasksStatus();
-      const running = quickTasks.filter((t: any) => t.status === 'RUNNING').length;
-      const finished = quickTasks.filter((t: any) => t.status === 'FINISHED' || t.status === 'FAILED').length;
-      addLog('info', `轮询状态：运行中 ${running} 个，已结束 ${finished}/${total}`);
+      const running = quickTasks.filter((t) => t.status === 'RUNNING').length;
+      const finished = quickTasks.filter((t) => t.status === 'FINISHED' || t.status === 'FAILED').length;
+      addLog(`轮询状态：运行中 ${running} 个，已结束 ${finished}/${total}`);
 
-      const progress = 40 + Math.round((finished / total) * 60);
+      const safeTotal = total || 1;
+      const progress = 40 + Math.round((finished / safeTotal) * 60);
       crawlProgress.value = Math.min(progress, 100);
       
       if (running > 0) {
@@ -274,22 +304,22 @@ const startQuickPolling = () => {
         crawlStatus.value = '所有任务已完成';
       }
 
-      if (finished === total || rounds >= 30) {
+      if (finished === total || rounds >= CRAWL_CONFIG.maxPollRounds) {
         stopQuickPolling();
         await loadPreviewData();
         await loadJobStats();
         quickCrawling.value = false;
         crawlProgress.value = 100;
         crawlStatus.value = '爬取完成';
-        addLog('success', '✓ 爬取任务轮询结束，数据已刷新');
-        addLog('info', '========================================');
-        addLog('info', '爬取流程结束');
-        addLog('info', '========================================');
+        addLog('✓ 爬取任务轮询结束，数据已刷新', 'success');
+        addLog('========================================');
+        addLog('爬取流程结束');
+        addLog('========================================');
       }
-    } catch (e) {
-      addLog('warning', '轮询任务状态失败，稍后重试');
+    } catch (error: unknown) {
+      addLog('轮询任务状态异常，稍后将自动重试', 'warning');
     }
-  }, 8000);
+  }, CRAWL_CONFIG.pollIntervalMs);
 };
 
 const startQuickCrawl = async () => {
@@ -300,34 +330,26 @@ const startQuickCrawl = async () => {
   crawlProgress.value = 0;
   crawlStatus.value = '准备中';
   
-  const defaultCities = ['长沙'];
-  const keywords = ['Java后端', '运维', '软件测试', 'Python开发', '计算机相关', '应届生', '校招', '25届', '26届', '无经验', '0-1年', '1-3年', '实习'];
+  const defaultCities = CRAWL_CONFIG.defaultCities;
+  const keywords = [...CRAWL_CONFIG.keywords];
+  const sites = CRAWL_CONFIG.platforms;
   
-  addLog('info', '========================================');
-  addLog('info', '开始一键实时爬取所有平台');
-  addLog('info', `目标城市：${defaultCities.join('、')}`);
-  addLog('info', '目标平台：BOSS、智联招聘、前程无忧、猎聘、拉勾网、牛客网');
-  addLog('info', `关键词：${keywords.join(', ')}`);
-  addLog('info', '========================================');
+  addLog('========================================');
+  addLog('开始一键实时爬取所有平台');
+  addLog(`目标城市：${defaultCities.join('、')}`);
+  addLog(`目标平台：${sites.map(s => s.name).join('、')}`);
+  addLog(`关键词：${keywords.join(', ')}`);
+  addLog('========================================');
 
   try {
-    const sites = [
-      { name: 'BOSS', code: 'boss' },
-      { name: '智联招聘', code: 'zhaopin' },
-      { name: '前程无忧', code: '51job' },
-      { name: '猎聘', code: 'liepin' },
-      { name: '拉勾网', code: 'lagou' },
-      { name: '牛客网', code: 'nowcoder' }
-    ];
-    
     const city = defaultCities.join(',');
     let totalCreated = 0;
     let totalFailed = 0;
 
     for (let i = 0; i < sites.length; i++) {
       const site = sites[i];
-      addLog('info', `----------------------------------------`);
-      addLog('info', `正在爬取 ${site.name}...`);
+      addLog(`----------------------------------------`);
+      addLog(`正在爬取 ${site.name}...`);
       crawlStatus.value = `正在爬取 ${site.name}`;
       crawlProgress.value = Math.round((i / sites.length) * 30);
 
@@ -338,53 +360,56 @@ const startQuickCrawl = async () => {
       };
 
       try {
-        addLog('info', `创建 ${site.name} 爬取任务...`);
+        addLog(`创建 ${site.name} 爬取任务...`);
         const taskRes = await http.post('/crawl/task', task);
-        const taskId = typeof taskRes === 'number' ? taskRes : (taskRes as any).id || taskRes;
+        const result = unwrapResponse<{ id: number } | number>(taskRes);
+                                                                                          const taskId = typeof result === 'number' ? result : (result.id ?? 0);
 
         if (taskId) {
           totalCreated++;
           quickTaskIds.value.push(taskId);
-          addLog('success', `✓ ${site.name} 任务创建成功 (任务ID: ${taskId})`);
+          addLog(`✓ ${site.name} 任务创建成功 (任务ID: ${taskId})`, 'success');
           
-          addLog('info', `启动 ${site.name} 爬取任务...`);
+          addLog(`启动 ${site.name} 爬取任务...`);
           await http.post(`/crawl/task/${taskId}/start`);
-          addLog('success', `✓ ${site.name} 任务已启动`);
+          addLog(`✓ ${site.name} 任务已启动`, 'success');
         } else {
           totalFailed++;
-          addLog('error', `✗ ${site.name} 任务创建失败：无效的响应`);
+          addLog(`✗ ${site.name} 任务创建失败：无效的响应`, 'error');
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         totalFailed++;
-        const errorMsg = error.message || '未知错误';
-        addLog('error', `✗ ${site.name} 任务创建失败：${errorMsg}`);
+        const errorMsg = error instanceof Error ? error.message : '未知错误';
+        addLog(`✗ ${site.name} 任务创建失败：${errorMsg}`, 'error');
       }
 
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise(resolve => setTimeout(resolve, CRAWL_CONFIG.delayBetweenSites));
     }
 
     crawlProgress.value = 40;
     crawlStatus.value = '爬取任务已启动，等待执行完成';
     
-    addLog('info', '========================================');
-    addLog('success', `所有平台爬取任务已创建完成`);
-    addLog('success', `成功创建 ${totalCreated} 个爬取任务`);
+    addLog('========================================');
+    addLog(`所有平台爬取任务已创建完成`, 'success');
+    addLog(`成功创建 ${totalCreated} 个爬取任务`, 'success');
     if (totalFailed > 0) {
-      addLog('warning', `失败 ${totalFailed} 个爬取任务`);
+      addLog(`失败 ${totalFailed} 个爬取任务`, 'warning');
     }
-    addLog('info', '正在后台执行爬取，系统将自动轮询任务状态...');
-    addLog('info', '========================================');
+    addLog('正在后台执行爬取，系统将自动轮询任务状态...');
+    addLog('========================================');
     
     ElMessage.success('一键爬取任务已启动，正在后台执行');
 
     startQuickPolling();
 
-  } catch (error: any) {
-    const errorMsg = error.message || '未知错误';
-    addLog('error', `爬取失败：${errorMsg}`);
-    addLog('error', '请检查网络连接或后端服务是否正常');
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : '未知错误';
+    addLog(`爬取失败：${errorMsg}`, 'error');
+    addLog('请检查网络连接或后端服务是否正常', 'error');
     ElMessage.error('爬取失败，请检查网络连接或后端服务');
     quickCrawling.value = false;
+    crawlProgress.value = 0;
+    crawlStatus.value = '爬取失败';
   }
 };
 

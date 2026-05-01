@@ -1,9 +1,11 @@
 package com.example.recruitment.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -16,20 +18,18 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 
-/**
- * Spring Security 配置类
- * <p>
- * 配置JWT无状态认证体系：
- * - 禁用Session（使用Token认证）
- * - 开放登录/注册接口
- * - 其他所有接口需要携带有效JWT Token
- * </p>
- */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+
+    @Value("${cors.allowed-origins}")
+    private String allowedOrigins;
+
+    @Value("${spring.profiles.active:dev}")
+    private String activeProfile;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
@@ -37,17 +37,10 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-                // ========== 禁用CSRF（JWT不需要） ==========
+        var auth = http
                 .csrf(AbstractHttpConfigurer::disable)
-
-                // ========== 配置CORS ==========
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-
-                // ========== 无状态会话（不使用Session）==========
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                // ========== 异常处理：未认证返回401 JSON而非默认页面 ==========
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -60,33 +53,33 @@ public class SecurityConfig {
                             response.getWriter().write("{\"code\":403,\"msg\":\"权限不足\",\"data\":null}");
                         })
                 )
+                .authorizeHttpRequests();
+        
+        auth.requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
+            .requestMatchers("/api/auth/auto-login").permitAll()
+            .requestMatchers("/api/auth/default-username").permitAll()
+            // [安全优化] 注释掉 default-credentials 接口的放行，避免密码泄露
+            // .requestMatchers("/api/auth/default-credentials").permitAll()
+            .requestMatchers("/api/model/status", "/api/model/health").permitAll();
+            // [安全优化] AI 和知识库接口需要认证，不再完全开放
+            // .requestMatchers("/api/ai/**").permitAll()
+            // .requestMatchers("/api/knowledge/**").permitAll();
+        
+        if (!"prod".equals(activeProfile)) {
+            auth.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll();
+        }
+        
+        auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+            .requestMatchers(HttpMethod.GET,
+                    "/favicon.ico",
+                    "/*.html",
+                    "/css/**",
+                    "/js/**",
+                    "/images/**"
+            ).permitAll()
+            .anyRequest().authenticated();
 
-                // ========== 请求授权规则 ==========
-                .authorizeHttpRequests(auth -> auth
-                        // ===== 公开接口（无需Token）=====
-                        // 登录/注册
-                        .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
-                        // 模型状态接口
-                        .requestMatchers("/api/model/status", "/api/model/health").permitAll()
-                        // Swagger文档（开发环境）
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        // CORS预检请求
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // 静态资源
-                        .requestMatchers(HttpMethod.GET,
-                                "/favicon.ico",
-                                "/*.html",
-                                "/css/**",
-                                "/js/**",
-                                "/images/**"
-                        ).permitAll()
-
-                        // ===== 需要认证的接口（其他全部需要JWT Token）=====
-                        .anyRequest().authenticated()
-                )
-
-                // ========== 添加JWT过滤器（在用户名密码过滤器之前执行）==========
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -94,15 +87,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(Arrays.asList(
-            "http://localhost:5173",
-            "http://localhost:5174",
-            "http://localhost:5175",
-            "http://localhost:3000",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:5174",
-            "http://127.0.0.1:5175"
-        ));
+        configuration.setAllowedOriginPatterns(Arrays.asList(allowedOrigins.split(",")));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);

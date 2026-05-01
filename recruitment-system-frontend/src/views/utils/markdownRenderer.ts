@@ -87,48 +87,169 @@ export function createMarkdownRenderer(): Renderer {
     return `<strong style="color:${strongClr};font-weight:700;background:linear-gradient(135deg, ${bgWarm}, ${bgYel});padding:1px 4px;border-radius:3px;">${text}</strong>`;
   };
 
-  // 图片渲染
+  // 图片渲染（带XSS防护）
   renderer.image = function(href, title, text) {
-    return `<img src="${href}" alt="${text || ''}" title="${title || ''}" style="max-width:100%;border-radius:8px;margin:10px 0;box-shadow:0 2px 8px rgba(0,0,0,0.1);">`;
+    const cleanHref = sanitizeUrl(href);
+    const cleanTitle = escapeHtml(title || '');
+    const cleanText = escapeHtml(text || '');
+    if (!cleanHref) return '';
+    return `<img src="${cleanHref}" alt="${cleanText}" title="${cleanTitle}" style="max-width:100%;border-radius:8px;margin:10px 0;box-shadow:0 2px 8px rgba(0,0,0,0.1);">`;
+  };
+
+  // 链接渲染（带XSS防护）
+  renderer.link = function(href, title, text) {
+    const cleanHref = sanitizeUrl(href);
+    const cleanTitle = escapeHtml(title || '');
+    const cleanText = escapeHtml(text || '');
+    if (!cleanHref) return cleanText;
+    return `<a href="${cleanHref}" title="${cleanTitle}" target="_blank" rel="noopener noreferrer" style="color:#667eea;text-decoration:none;border-bottom:1px solid #667eea;">${cleanText}</a>`;
   };
 
   return renderer;
 }
 
-/** 预创建的渲染器单例，避免每次渲染都重新创建 */
+/**
+ * URL安全过滤 - 防止XSS攻击
+ */
+function sanitizeUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (trimmed.toLowerCase().startsWith('javascript:') ||
+      trimmed.toLowerCase().startsWith('data:') ||
+      trimmed.toLowerCase().startsWith('vbscript:')) {
+    return '';
+  }
+  return trimmed;
+}
+
+/**
+ * HTML实体转义
+ */
+function escapeHtml(text: string): string {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/** 预创建的渲染器单例 */
 export const mdRendererInstance: Renderer = createMarkdownRenderer();
 
 /**
  * 将 Markdown 文本渲染为 HTML 字符串
- * @param content Markdown 原文
- * @returns 渲染后的 HTML 字符串
  */
 export function renderMarkdown(content: string): string {
   if (!content || !content.trim()) return '';
   try {
-    // 深度清理文本，确保Markdown格式正确
-    let cleanedContent = content
-      // 清理多余的标点符号
-      .replace(/([.!?，。！？]){2,}/g, '$1') // 移除重复标点
-      .replace(/([,，]){2,}/g, '$1') // 移除重复逗号
-      .replace(/([:：]){2,}/g, '$1') // 移除重复冒号
-      
-      // 确保Markdown格式正确
-      .replace(/([#]+)([^\s#])/g, '$1 $2') // 确保标题后有空格
-      .replace(/([*_]+)([^\s*_])/g, '$1 $2') // 确保粗体/斜体标记后有空格
-      .replace(/([*_]+)$/g, '') // 移除末尾的标记
-      .replace(/\|{3,}/g, '|') // 清理多余的表格分隔符
-      
-      // 确保数字和单位之间的空格
-      .replace(/(\d+)([kK])([^\s])/g, '$1$2 $3') // 确保k后面有空格
-      .replace(/(\d+)([%,])([^\s])/g, '$1$2 $3') // 确保百分号/逗号后有空格
-      
-      // 清理多余的空格
-      .replace(/\s{2,}/g, ' ') // 多个空格替换为单个空格
-      .replace(/^\s+|\s+$/g, ''); // 移除首尾空格
+    let cleanedContent = content;
     
-    return marked(cleanedContent, { renderer: mdRendererInstance, breaks: true, gfm: true }) as string;
+    // ====== 第一步：SSE格式清理 ======
+    cleanedContent = cleanedContent
+      .replace(/^data:\s*/gm, '')
+      .replace(/^event:\w+\s*$/gm, '')
+      .replace(/^event:\w+$/gm, '');
+    
+    // 修复被 SSE 切割的 emoji（如 "⚠event:message" -> "⚠️"）
+    cleanedContent = cleanedContent.replace(/([\u2600-\u27BF])event:message/gi, '$1');
+    
+    // ====== 第二步：移除所有 Markdown 标记 ======
+    // 移除所有 # 标题标记
+    cleanedContent = cleanedContent
+      .replace(/^#{1,6}\s*/gm, '')
+      .replace(/^#{1,6}$/gm, '');
+    // 移除代码块标记
+    cleanedContent = cleanedContent
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/```\w*/g, '');
+    // 移除所有反引号
+    cleanedContent = cleanedContent.replace(/`{1,3}/g, '');
+    // 移除水平分隔线
+    cleanedContent = cleanedContent.replace(/^\s*[-*_]{3,}\s*$/gm, '');
+    // 移除表格分隔线
+    cleanedContent = cleanedContent.replace(/\|?\s*[:\-]+\s*[:\|\-\s]*\|/g, '');
+    // 移除引用标记
+    cleanedContent = cleanedContent.replace(/^\s*>\s*/gm, '');
+    // 移除粗体、斜体、删除线标记
+    cleanedContent = cleanedContent
+      .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
+      .replace(/_{1,2}([^_]+)_{1,2}/g, '$1')
+      .replace(/~~([^~]+)~~/g, '$1')
+      .replace(/~~/g, '');
+    
+    // ====== 第三步：移除行首的列表符号 ======
+    cleanedContent = cleanedContent.replace(/^[\-\*\•·]\s*/gm, '');
+    cleanedContent = cleanedContent.replace(/^\s*\d+\.\s+/gm, '');
+    
+    // ====== 第四步：修复常见的碎片化问题 ======
+    
+    // 修复 emoji 后面被切割的情况
+    cleanedContent = cleanedContent.replace(/([\u2600-\u27BF])\s+(?=[^\s\u4E00-\u9FFF])/g, '$1');
+    cleanedContent = cleanedContent.replace(/\s+([\u2600-\u27BF])/g, '$1');
+    
+    // 修复百分数：移除百分号前的多余空格
+    cleanedContent = cleanedContent.replace(/(\d+\.?\d*)\s*%\s*/g, '$1%');
+    
+    // 修复编号格式（1 . 初 级 -> 1. 初级）
+    cleanedContent = cleanedContent.replace(/(\d)\s+\.\s+([\u4E00-\u9FFFa-zA-Z])/g, '$1. $2');
+    
+    // ====== 第五步：清理标点和多余空格 ======
+    // 清理重复标点
+    cleanedContent = cleanedContent
+      .replace(/([.!?，。！？]){2,}/g, '$1')
+      .replace(/([,，]){2,}/g, '$1')
+      .replace(/([:：]){2,}/g, '$1')
+      .replace(/([;；]){2,}/g, '$1');
+    // 移除连续的特殊字符
+    cleanedContent = cleanedContent.replace(/[*_#|\\]{3,}/g, ' ');
+    // 合并多个空格
+    cleanedContent = cleanedContent.replace(/\s{2,}/g, ' ');
+    // 移除行首行尾空格
+    cleanedContent = cleanedContent.replace(/^[ \t]+|[ \t]+$/gm, '');
+    
+    // ====== 第六步：格式化美观显示 ======
+    
+    // 格式化标题【标题名】
+    cleanedContent = cleanedContent.replace(
+      /^【([^】]+)】/gm, 
+      '<div style="background:linear-gradient(135deg, #667eea20, #764ba220);border-left:4px solid #667eea;padding:10px 16px;margin:16px 0 8px 0;border-radius:0 8px 8px 0;"><b style="color:#667eea;font-size:16px;">【$1】</b></div>'
+    );
+    
+    // 格式化重点『关键词』
+    cleanedContent = cleanedContent.replace(
+      /『([^』]+)』/g, 
+      '<b style="color:#e65100;background:linear-gradient(135deg, #fff7ed, #fffbe6);padding:2px 6px;border-radius:4px;">『$1』</b>'
+    );
+    
+    // 格式化薪资数字
+    cleanedContent = cleanedContent.replace(
+      /(\d+[kK](?:-?\d+[kK])?)/g,
+      '<b style="color:#d63384;background:#fce4ec;padding:1px 4px;border-radius:3px;font-weight:600;">$1</b>'
+    );
+    
+    // 格式化百分数
+    cleanedContent = cleanedContent.replace(
+      /(\d+\.?\d*%)/g,
+      '<b style="color:#007bff;">$1</b>'
+    );
+    
+    // ====== 第七步：按换行转为段落 ======
+    
+    cleanedContent = cleanedContent
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => {
+        if (line.startsWith('<') && line.endsWith('>')) {
+          return line;
+        }
+        return `<p style="margin:10px 0;line-height:1.8;font-size:14px;color:#333;">${line}</p>`;
+      })
+      .join('');
+    
+    return cleanedContent;
   } catch {
-    return marked.parse(content) as string;
+    const div = document.createElement('div');
+    div.textContent = content;
+    return div.innerHTML;
   }
 }

@@ -110,11 +110,8 @@ public class AIService {
 
     /**
      * 流式调用智谱AI（SSE）
-     *
-     * @param systemPrompt 系统提示词
-     * @param userMessage 用户消息
-     * @param emitter      SSE发射器，用于向前端推送流式数据
-     * @throws Exception 调用失败时抛出异常
+     * 采用行缓冲模式：将收到的token先缓存到当前行，达到换行或缓存满时一次性发送
+     * 这样避免前端每个token都换行显示的问题
      */
     public void chatStream(String systemPrompt, String userMessage, SseEmitter emitter) throws Exception {
         if (!isApiKeyConfigured()) {
@@ -134,23 +131,40 @@ public class AIService {
             throw new Exception("流式API调用失败 (HTTP " + responseCode + "): " + errorBody);
         }
 
+        final int MAX_LINE_BUFFER = 150; // 每150字符强制发送一行
+
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
+            StringBuilder currentLine = new StringBuilder();
+
             while ((line = br.readLine()) != null) {
                 if (line.startsWith("data:")) {
                     String data = line.substring(5).trim();
                     if (data.equals("[DONE]")) {
+                        // 发送最后一行（如果有内容）
+                        if (currentLine.length() > 0) {
+                            String toSend = currentLine.toString().trim();
+                            if (!toSend.isEmpty()) {
+                                emitter.send(SseEmitter.event().name("message").data(toSend));
+                            }
+                        }
                         break;
                     }
                     String content = extractStreamContent(data);
                     if (content != null && !content.isEmpty()) {
-                        emitter.send(SseEmitter.event().name("message").data(content));
-                        try {
-                            Thread.sleep(30); // 控制推送频率，避免前端渲染压力过大
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            break;
+                        // 清理：移除换行符和多余空格
+                        String cleaned = content.replace("\n", "").replace("\r", "").replaceAll("\\s+", " ");
+                        currentLine.append(cleaned);
+
+                        // 逻辑：收集内容直到遇到句号/问号/感叹号，或者缓冲满
+                        // 这样每个完整句子作为一行发送
+                        if (currentLine.length() >= MAX_LINE_BUFFER) {
+                            String toSend = currentLine.toString().trim();
+                            if (!toSend.isEmpty()) {
+                                emitter.send(SseEmitter.event().name("message").data(toSend + "\n"));
+                            }
+                            currentLine.setLength(0);
                         }
                     }
                 }
@@ -240,7 +254,11 @@ public class AIService {
             JsonNode node = objectMapper.readTree(data);
             String content = node.path("choices").path(0).path("delta").path("content").asText("");
             if (content != null && !content.isEmpty()) {
-                return content;
+                // 过滤掉换行符，避免前端每个词都换行
+                content = content.replace("\n", "").replace("\r", "");
+                if (!content.isEmpty()) {
+                    return content;
+                }
             }
         } catch (Exception e) {
             log.debug("流式JSON解析异常: {}", e.getMessage());

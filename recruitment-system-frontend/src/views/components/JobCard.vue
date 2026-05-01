@@ -110,18 +110,30 @@ const formattedSalary = computed(() => {
 /** 截断描述文本 */
 const truncatedDesc = computed(() => {
   if (!props.job.jobDesc) return '';
-  return props.job.jobDesc.length > 100 ? props.job.jobDesc.substring(0, 100) + '...' : props.job.jobDesc;
+  const desc = String(props.job.jobDesc);
+  return desc.length > 100 ? desc.substring(0, 100) + '...' : desc;
 });
 
 /** 格式化发布日期 */
 const formattedDate = computed(() => {
   if (!props.job.publishTime) return '未知';
-  return props.job.publishTime.substring(0, 10);
+  const time = props.job.publishTime;
+  // 支持 Date 对象或字符串
+  if (time instanceof Date) {
+    return time.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  }
+  if (typeof time === 'object' && time !== null && 'toISOString' in time) {
+    return String(time).substring(0, 10);
+  }
+  if (typeof time === 'string') {
+    return time.length >= 10 ? time.substring(0, 10) : time;
+  }
+  return String(time).substring(0, 10);
 });
 
 /** 根据索引返回技能标签颜色类型 */
 const getSkillTagType = (index: number | string) => {
-  const types = ['', 'success', 'warning', 'danger'];
+  const types = ['primary', 'success', 'warning', 'danger'];
   return types[Number(index) % 4];
 };
 </script>

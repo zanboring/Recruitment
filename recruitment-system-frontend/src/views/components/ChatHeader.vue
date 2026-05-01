@@ -1,6 +1,6 @@
 <template>
   <div class="card-header">
-    <el-avatar class="logo-avatar" size="40">
+    <el-avatar class="logo-avatar" :size="40">
       <el-icon class="logo-icon"><ChatDotRound /></el-icon>
     </el-avatar>
     <div class="header-content">
@@ -10,14 +10,14 @@
     <div class="header-actions">
       <el-tooltip content="使用AI进行招聘相关分析" placement="left">
         <el-button 
-          type="text" 
+          link 
           icon="InfoFilled" 
           class="info-button"
         />
       </el-tooltip>
       <el-tooltip content="关于" placement="left">
         <el-button 
-          type="text" 
+          link 
           icon="HelpFilled" 
           class="help-button"
           @click="showAbout"

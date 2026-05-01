@@ -1,34 +1,50 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import axios from 'axios';
+// [优化] 改用封装好的 http 实例，统一认证和错误处理
+import http from '@/api/http';
+
+export type ModelType = 'primary' | 'local' | 'auto';
+
+interface OllamaStatus {
+  available: boolean;
+  model: string;
+  status: string;
+  description: string;
+}
+
+interface ZhipuStatus {
+  available: boolean;
+  model: string;
+  description: string;
+}
+
+interface AIStatus {
+  ollama: OllamaStatus;
+  zhipu: ZhipuStatus;
+}
 
 export const useModelStore = defineStore('model', () => {
-  // 当前使用的模型类型: 'primary' | 'local' | 'auto'
-  const currentModel = ref<'primary' | 'local' | 'auto'>('primary');
+  const currentModel = ref<ModelType>('auto');
   
-  // 主API状态
-  const primaryAvailable = ref(false);
-  const primaryDescription = ref('');
+  const ollamaAvailable = ref(false);
+  const ollamaModel = ref('');
+  const ollamaStatus = ref('');
+  const ollamaDescription = ref('');
   
-  // 小模型状态
-  const localAvailable = ref(false);
-  const localStatus = ref('unknown');
-  const localDescription = ref('');
-  const localVersion = ref('');
+  const zhipuAvailable = ref(false);
+  const zhipuModel = ref('');
+  const zhipuDescription = ref('');
   
-  // 是否正在加载
   const loading = ref(false);
 
-  // 是否显示切换按钮（仅当小模型可用时显示）
   const showSwitchButton = computed(() => {
-    return localAvailable.value;
+    return ollamaAvailable.value || zhipuAvailable.value;
   });
 
-  // 当前模型显示名称
   const currentModelName = computed(() => {
     switch (currentModel.value) {
       case 'local':
-        return '小模型';
+        return '本地模型';
       case 'primary':
         return '主API';
       case 'auto':
@@ -38,95 +54,82 @@ export const useModelStore = defineStore('model', () => {
     }
   });
 
-  // 获取模型状态
   async function fetchStatus() {
     loading.value = true;
     try {
-      const response = await axios.get('/api/model/status');
-      const data = response.data.data;
+      // [优化] 改用封装的 http 实例，自动携带 Authorization header
+      const data: AIStatus = await http.get('/ai/status');
       
-      if (data.primary) {
-        primaryAvailable.value = data.primary.available;
-        primaryDescription.value = data.primary.description;
+      if (data.ollama) {
+        ollamaAvailable.value = data.ollama.available;
+        ollamaModel.value = data.ollama.model;
+        ollamaStatus.value = data.ollama.status;
+        ollamaDescription.value = data.ollama.description;
       }
       
-      if (data.local) {
-        localAvailable.value = data.local.available;
-        localStatus.value = data.local.status;
-        localDescription.value = data.local.description;
-        localVersion.value = data.local.version;
+      if (data.zhipu) {
+        zhipuAvailable.value = data.zhipu.available;
+        zhipuModel.value = data.zhipu.model;
+        zhipuDescription.value = data.zhipu.description;
       }
     } catch (error: any) {
       console.error('获取模型状态失败:', error);
-      if (error.response) {
-        console.error('HTTP状态码:', error.response.status);
-        console.error('响应数据:', error.response.data);
-      } else if (error.request) {
-        console.error('网络请求失败，后端服务可能未启动');
-      } else {
-        console.error('请求配置错误:', error.message);
-      }
-      localAvailable.value = false;
+      // [优化] 简化错误日志，移除冗余的嵌套判断
+      ollamaAvailable.value = false;
+      zhipuAvailable.value = false;
     } finally {
       loading.value = false;
     }
   }
 
-  // 切换到主API
   function switchToPrimary() {
     currentModel.value = 'primary';
   }
 
-  // 切换到小模型
   function switchToLocal() {
-    if (localAvailable.value) {
+    if (ollamaAvailable.value) {
       currentModel.value = 'local';
     }
   }
 
-  // 切换到自动模式
   function switchToAuto() {
     currentModel.value = 'auto';
   }
 
-  // 检查是否应该使用本地模型
-  function shouldUseLocalModel(): boolean {
-    if (currentModel.value === 'local') {
-      return localAvailable.value;
+  function getUseLocalModelValue(): boolean | null {
+    switch (currentModel.value) {
+      case 'local':
+        return true;
+      case 'primary':
+        return false;
+      case 'auto':
+        return null;
+      default:
+        return null;
     }
-    if (currentModel.value === 'auto') {
-      // 自动模式：优先使用小模型，如果不可用则回退到主API
-      return localAvailable.value;
-    }
-    return false;
   }
 
-  // 刷新状态
   function refreshStatus() {
     fetchStatus();
   }
 
   return {
-    // 状态
     currentModel,
-    primaryAvailable,
-    primaryDescription,
-    localAvailable,
-    localStatus,
-    localDescription,
-    localVersion,
+    ollamaAvailable,
+    ollamaModel,
+    ollamaStatus,
+    ollamaDescription,
+    zhipuAvailable,
+    zhipuModel,
+    zhipuDescription,
     loading,
-    
-    // 计算属性
     showSwitchButton,
     currentModelName,
-    
-    // 方法
     fetchStatus,
     switchToPrimary,
     switchToLocal,
     switchToAuto,
-    shouldUseLocalModel,
+    getUseLocalModelValue,
     refreshStatus
   };
 });

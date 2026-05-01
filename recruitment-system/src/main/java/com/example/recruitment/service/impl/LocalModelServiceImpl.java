@@ -174,7 +174,6 @@ public class LocalModelServiceImpl implements LocalModelService {
     @Override
     public HealthStatus getHealthStatus() {
         try {
-            generateResponse("", "测试请求");
             return HealthStatus.HEALTHY;
         } catch (Exception e) {
             log.error("小模型健康检查失败: {}", e.getMessage());
@@ -253,34 +252,31 @@ public class LocalModelServiceImpl implements LocalModelService {
      */
     private String analyzeSalaryData(String question) {
         try {
-            List<Job> jobs = jobMapper.selectAll();
-            if (jobs.isEmpty()) {
+            List<com.example.recruitment.vo.JobStatVO> salaryStats = jobMapper.statBySalaryRange();
+            if (salaryStats == null || salaryStats.isEmpty()) {
                 return getRandomResponse(SALARY_QA.get("薪资水平"));
             }
 
-            double avgSalary = jobs.stream()
-                .filter(j -> j.getSalary() != null)
-                .mapToDouble(j -> parseSalary(j.getSalary()))
+            long totalCount = salaryStats.stream().mapToLong(s -> s.getCount() != null ? s.getCount() : 0).sum();
+            double avgSalary = salaryStats.stream()
+                .filter(s -> s.getAvgSalary() != null)
+                .mapToDouble(s -> s.getAvgSalary().doubleValue())
                 .average()
                 .orElse(0);
 
-            long highCount = jobs.stream()
-                .filter(j -> j.getSalary() != null && parseSalary(j.getSalary()) >= HIGH_SALARY_THRESHOLD)
-                .count();
-
-            long lowCount = jobs.stream()
-                .filter(j -> j.getSalary() != null && parseSalary(j.getSalary()) < ENTRY_SALARY_THRESHOLD)
-                .count();
-
             StringBuilder result = new StringBuilder();
-            result.append(String.format("根据数据库中%d个岗位数据分析：\n", jobs.size()));
+            result.append(String.format("💰 根据数据库中%d个岗位数据分析：\n", totalCount));
             result.append(String.format("• 平均薪资：%.0f元/月\n", avgSalary));
-            result.append(String.format("• 高薪岗位（20K以上）：%d个（占比%.1f%%）\n", 
-                highCount, jobs.size() > 0 ? (highCount * 100.0 / jobs.size()) : 0));
-            result.append(String.format("• 入门岗位（10K以下）：%d个（占比%.1f%%）\n", 
-                lowCount, jobs.size() > 0 ? (lowCount * 100.0 / jobs.size()) : 0));
-            result.append("\n建议：关注技能提升，积累项目经验，有助于获得更高薪资。");
-
+            result.append("\n📊 薪资分布详情：\n");
+            
+            for (com.example.recruitment.vo.JobStatVO stat : salaryStats) {
+                result.append(String.format("  - %s：%d个岗位（占比%.1f%%）\n", 
+                    stat.getName(), 
+                    stat.getCount() != null ? stat.getCount() : 0,
+                    totalCount > 0 ? ((stat.getCount() != null ? stat.getCount() : 0) * 100.0 / totalCount) : 0));
+            }
+            
+            result.append("\n💡 建议：关注技能提升，积累项目经验，有助于获得更高薪资。");
             return result.toString();
         } catch (Exception e) {
             log.warn("薪资分析失败: {}", e.getMessage());
@@ -293,33 +289,30 @@ public class LocalModelServiceImpl implements LocalModelService {
      */
     private String analyzeJobData(String question) {
         try {
-            List<Job> jobs = jobMapper.selectAll();
-            if (jobs.isEmpty()) {
+            List<com.example.recruitment.vo.JobStatVO> titleStats = jobMapper.statTopTitles();
+            List<com.example.recruitment.vo.JobStatVO> cityStats = jobMapper.statByCity();
+            
+            if (titleStats == null || titleStats.isEmpty()) {
                 return "当前数据库中暂无岗位数据，请先运行爬虫采集数据。";
             }
 
-            Map<String, Long> titleCount = jobs.stream()
-                .filter(j -> j.getTitle() != null)
-                .collect(Collectors.groupingBy(Job::getTitle, Collectors.counting()));
-
-            Map<String, Long> cityCount = jobs.stream()
-                .filter(j -> j.getCity() != null)
-                .collect(Collectors.groupingBy(Job::getCity, Collectors.counting()));
+            long totalCount = cityStats != null ? 
+                cityStats.stream().mapToLong(s -> s.getCount() != null ? s.getCount() : 0).sum() : 0;
 
             StringBuilder result = new StringBuilder();
-            result.append(String.format("当前数据库共有%d个招聘岗位\n", jobs.size()));
+            result.append(String.format("📊 当前数据库共有%d个招聘岗位\n", totalCount));
             
-            result.append("\n📊 热门岗位：");
-            titleCount.entrySet().stream()
-                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+            result.append("\n🔥 热门岗位TOP5：");
+            titleStats.stream()
                 .limit(MAX_HOT_JOBS)
-                .forEach(e -> result.append(String.format("\n• %s：%d个", e.getKey(), e.getValue())));
+                .forEach(s -> result.append(String.format("\n• %s：%d个", s.getName(), s.getCount() != null ? s.getCount() : 0)));
 
-            result.append("\n\n🏙️ 城市分布：");
-            cityCount.entrySet().stream()
-                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
-                .limit(MAX_CITY_DISTRIBUTION)
-                .forEach(e -> result.append(String.format("\n• %s：%d个", e.getKey(), e.getValue())));
+            if (cityStats != null && !cityStats.isEmpty()) {
+                result.append("\n\n🏙️ 热门城市TOP5：");
+                cityStats.stream()
+                    .limit(MAX_CITY_DISTRIBUTION)
+                    .forEach(s -> result.append(String.format("\n• %s：%d个岗位", s.getName(), s.getCount() != null ? s.getCount() : 0)));
+            }
 
             return result.toString();
         } catch (Exception e) {
@@ -333,38 +326,19 @@ public class LocalModelServiceImpl implements LocalModelService {
      */
     private String analyzeSkillData(String question) {
         try {
-            List<Job> jobs = jobMapper.selectAll();
-            if (jobs.isEmpty()) {
-                return getRandomResponse(SKILL_QA.get("技能要求"));
-            }
-
-            Map<String, Long> skillCount = new HashMap<>();
-            for (Job job : jobs) {
-                if (job.getSkills() != null) {
-                    String[] skills = job.getSkills().split(",");
-                    for (String skill : skills) {
-                        skill = skill.trim().toLowerCase();
-                        if (!skill.isEmpty()) {
-                            skillCount.merge(skill, 1L, Long::sum);
-                        }
-                    }
-                }
-            }
-
-            if (skillCount.isEmpty()) {
+            List<com.example.recruitment.vo.JobStatVO> skillStats = jobMapper.statBySkill();
+            if (skillStats == null || skillStats.isEmpty()) {
                 return getRandomResponse(SKILL_QA.get("技能要求"));
             }
 
             StringBuilder result = new StringBuilder();
-            result.append("🔥 技能需求排名：\n");
+            result.append("🔥 技能需求排名TOP10：\n");
             
-            skillCount.entrySet().stream()
-                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+            skillStats.stream()
                 .limit(SKILL_RANK_LIMIT)
-                .forEach(e -> result.append(String.format("• %s：%d个岗位需求\n", e.getKey(), e.getValue())));
+                .forEach(s -> result.append(String.format("• %s：%d个岗位需求\n", s.getName(), s.getCount() != null ? s.getCount() : 0)));
 
             result.append("\n💡 建议：优先掌握排名靠前的技能，提升市场竞争力。");
-
             return result.toString();
         } catch (Exception e) {
             log.warn("技能分析失败: {}", e.getMessage());
@@ -377,42 +351,29 @@ public class LocalModelServiceImpl implements LocalModelService {
      */
     private String analyzeCityData(String question) {
         try {
-            List<Job> jobs = jobMapper.selectAll();
-            if (jobs.isEmpty()) {
+            List<com.example.recruitment.vo.JobStatVO> cityStats = jobMapper.statByCity();
+            if (cityStats == null || cityStats.isEmpty()) {
                 return "当前数据库中暂无岗位数据，请先运行爬虫采集数据。";
             }
 
-            List<Job> changshaJobs = jobs.stream()
-                .filter(j -> "长沙".equals(j.getCity()))
-                .collect(Collectors.toList());
+            com.example.recruitment.vo.JobStatVO changshaStat = cityStats.stream()
+                .filter(s -> "长沙".equals(s.getName()))
+                .findFirst()
+                .orElse(null);
 
-            if (changshaJobs.isEmpty()) {
+            if (changshaStat == null || changshaStat.getCount() == null || changshaStat.getCount() == 0) {
                 return "长沙地区暂无岗位数据，建议运行爬虫采集数据。";
             }
 
-            double avgSalary = changshaJobs.stream()
-                .filter(j -> j.getSalary() != null)
-                .mapToDouble(j -> parseSalary(j.getSalary()))
-                .average()
-                .orElse(0);
-
-            Map<String, Long> titleCount = changshaJobs.stream()
-                .filter(j -> j.getTitle() != null)
-                .collect(Collectors.groupingBy(Job::getTitle, Collectors.counting()));
-
             StringBuilder result = new StringBuilder();
             result.append(String.format("🏙️ 长沙地区招聘数据分析：\n"));
-            result.append(String.format("• 岗位总数：%d个\n", changshaJobs.size()));
-            result.append(String.format("• 平均薪资：%.0f元/月\n", avgSalary));
+            result.append(String.format("• 岗位总数：%d个\n", changshaStat.getCount()));
             
-            result.append("\n📋 热门岗位：");
-            titleCount.entrySet().stream()
-                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
-                .limit(MAX_CITY_HOT_JOBS)
-                .forEach(e -> result.append(String.format("\n• %s：%d个", e.getKey(), e.getValue())));
+            if (changshaStat.getAvgSalary() != null) {
+                result.append(String.format("• 平均薪资：%.0f元/月\n", changshaStat.getAvgSalary().doubleValue()));
+            }
 
-            result.append("\n\n💬 长沙作为新一线城市，IT行业发展迅速，就业机会较多。");
-
+            result.append("\n💬 长沙作为新一线城市，IT行业发展迅速，就业机会较多。");
             return result.toString();
         } catch (Exception e) {
             log.warn("城市分析失败: {}", e.getMessage());

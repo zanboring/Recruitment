@@ -52,9 +52,11 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue';
+import { computed, reactive, watch } from 'vue';
 
 interface Factor { label: string; type: string }
+
+defineOptions({ inheritAttrs: false });
 
 const props = defineProps<{
   visible: boolean; loading: boolean;
@@ -76,7 +78,6 @@ const dialogVisible = computed({
 
 const form = reactive({ city: '', experience: '', education: '', skills: '' });
 
-// 每次打开弹窗时，预填当前筛选条件
 watch(() => props.visible, (val) => {
   if (val) {
     form.city = props.initCity || '';
@@ -98,8 +99,3 @@ const handlePredict = () => {
 .predict-factors { text-align: center; margin-top: 8px; }
 .predict-factors p { color: var(--text-regular); font-size: 13px; margin-bottom: 8px; }
 </style>
-
-<script lang="ts">
-import { computed } from 'vue';
-export default { inheritAttrs: false };
-</script>
