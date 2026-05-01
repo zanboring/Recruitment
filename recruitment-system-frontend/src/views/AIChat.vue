@@ -56,7 +56,7 @@
       >
         <div class="about-content">
           <div class="about-logo">
-            <el-avatar size="80">
+            <el-avatar :size="80">
               <el-icon class="about-logo-icon"><ChatDotRound /></el-icon>
             </el-avatar>
           </div>
@@ -171,67 +171,51 @@ const handleSend = async (messageText?: string) => {
   const aiIndex = chatStore.createAiPlaceholder();
 
   try {
-    // 使用智能路由接口，支持主API和小模型切换
-    const response = await fetch('/api/model/chat', {
+    const response = await fetch('/api/ai/stream', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json;charset=UTF-8',
         'Authorization': `Bearer ${userStore.token}`
       },
       body: JSON.stringify({
         message: actualContent,
-        useLocalModel: modelStore.shouldUseLocalModel()
+        useLocalModel: modelStore.getUseLocalModelValue()
       })
     });
 
-    // 处理 HTTP 错误状态码
     if (!response.ok) {
       let errorMsg = 'AI服务暂时不可用';
       try {
         const errBody = await response.json();
         errorMsg = errBody.msg || errBody.message || errorMsg;
       } catch (_) {
-        // 非 JSON 响应，使用默认错误消息
       }
       chatStore.setAiError(aiIndex, `[错误] ${errorMsg}`);
       chatStore.setError(errorMsg);
       return;
     }
 
-    // 解析 JSON 响应
-    const result = await response.json();
-    
-    if (result.code === 0 && result.data) {
-      const responseData = result.data;
-      const aiResponse = responseData.response || '暂无回复';
-      
-      // 模拟流式输出效果
-      let currentIndex = 0;
-      const displayResponse = () => {
-        if (currentIndex < aiResponse.length) {
-          // 每次添加一个字符
-          chatStore.appendAiContent(aiIndex, aiResponse[currentIndex]);
-          currentIndex++;
-          nextTick().then(() => {
-            scrollToBottom();
-            // 控制输出速度
-            setTimeout(displayResponse, 30);
-          });
-        }
-      };
-      displayResponse();
-      
-      // 显示使用的模型
-      if (responseData.usedModel) {
-        console.log(`使用模型: ${responseData.usedModel}`);
-        if (responseData.fallback) {
-          ElMessage.warning('主API不可用，已自动切换到小模型');
-        }
-      }
-    } else {
-      chatStore.setAiError(aiIndex, '[错误] ' + (result.msg || '获取响应失败'));
-      chatStore.setError(result.msg || '获取响应失败');
+    const reader = response.body?.getReader();
+    if (!reader) {
+      chatStore.setAiError(aiIndex, '[错误] 无法读取响应流');
+      return;
     }
+
+    const decoder = new TextDecoder();
+    let fullContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      fullContent += chunk;
+      
+      chatStore.setAiContent(aiIndex, fullContent);
+      await nextTick();
+      scrollToBottom();
+    }
+    
   } catch (err: any) {
     // 网络中断等异常
     chatStore.setError('AI回复失败，请检查网络连接或稍后重试');

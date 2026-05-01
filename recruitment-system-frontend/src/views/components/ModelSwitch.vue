@@ -10,19 +10,19 @@
         <el-dropdown-menu>
           <el-dropdown-item 
             command="primary" 
-            :disabled="!store.primaryAvailable"
+            :disabled="!store.zhipuAvailable"
           >
             <span class="option-icon primary"></span>
-            <span>主API</span>
-            <span v-if="!store.primaryAvailable" class="disabled-hint">(不可用)</span>
+            <span>主API (智谱)</span>
+            <span v-if="!store.zhipuAvailable" class="disabled-hint">(不可用)</span>
           </el-dropdown-item>
           <el-dropdown-item 
             command="local" 
-            :disabled="!store.localAvailable"
+            :disabled="!store.ollamaAvailable"
           >
             <span class="option-icon local"></span>
-            <span>小模型</span>
-            <span v-if="store.localAvailable" class="version-hint">v{{ store.localVersion }}</span>
+            <span>本地模型</span>
+            <span v-if="store.ollamaAvailable" class="version-hint">{{ store.ollamaModel }}</span>
           </el-dropdown-item>
           <el-dropdown-item command="auto">
             <span class="option-icon auto"></span>
@@ -32,7 +32,6 @@
       </template>
     </el-dropdown>
     
-    <!-- 状态提示 -->
     <div v-if="showStatusTip" class="status-tip">
       <el-tooltip :content="statusTipContent" placement="bottom">
         <el-icon class="status-icon"><InfoFilled /></el-icon>
@@ -57,11 +56,11 @@ const showStatusTip = computed(() => {
 });
 
 const statusTipContent = computed(() => {
-  if (store.localAvailable && store.primaryAvailable) {
-    return '自动模式：优先使用小模型，失败时回退到主API';
-  } else if (store.localAvailable) {
-    return '自动模式：仅小模型可用';
-  } else if (store.primaryAvailable) {
+  if (store.ollamaAvailable && store.zhipuAvailable) {
+    return '自动模式：优先使用本地模型，失败时回退到主API';
+  } else if (store.ollamaAvailable) {
+    return '自动模式：仅本地模型可用';
+  } else if (store.zhipuAvailable) {
     return '自动模式：仅主API可用';
   }
   return '自动模式：所有服务均不可用';
@@ -146,7 +145,7 @@ function handleSwitch(command: string) {
 }
 
 :deep(.el-dropdown-menu) {
-  min-width: 160px;
+  min-width: 180px;
 }
 
 :deep(.el-dropdown-item) {

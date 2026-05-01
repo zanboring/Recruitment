@@ -63,6 +63,13 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
+    /** 设置 AI 完整内容（流式更新用） */
+    setAiContent(index: number, content: string) {
+      if (index >= 0 && index < this.messages.length) {
+        this.messages[index].content = content;
+      }
+    },
+
     /** 设置 AI 最终错误内容 */
     setAiError(index: number, errorContent: string) {
       if (index >= 0 && index < this.messages.length) {

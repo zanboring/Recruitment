@@ -30,7 +30,8 @@ public class DataController {
     private final DataService dataService;
 
     @PostMapping("/import")
-    @Operation(summary = "导入数据", description = "从Excel文件导入招聘数据")
+    @Operation(summary = "导入数据", description = "从Excel文件导入招聘数据（需管理员权限）")
+    @PreAuthorize("hasAuthority('data:import') or hasRole('ADMIN')")
     public Result<Void> importJobs(@RequestPart("file") MultipartFile file) {
         log.info("导入数据请求: fileName={}, size={}", file.getOriginalFilename(), file.getSize());
         dataService.importJobs(file);

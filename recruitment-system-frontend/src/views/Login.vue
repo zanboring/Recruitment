@@ -126,7 +126,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { loginApi, registerApi } from '@/api/auth';
+import { loginApi, registerApi, defaultUsernameApi } from '@/api/auth';
 import { useUserStore } from '@/store/user';
 import { ElMessage, FormInstance, FormRules } from 'element-plus';
 import { User, Lock, DataBoard, Message } from '@element-plus/icons-vue';
@@ -356,13 +356,23 @@ const handleResize = () => {
   initParticles();
 };
 
-onMounted(() => {
-  const rememberedUsername = localStorage.getItem('rememberedUsername');
-  if (rememberedUsername) {
-    form.username = rememberedUsername;
-    form.rememberMe = true;
+onMounted(async () => {
+  // 从后端获取默认用户名自动填充（不暴露密码）
+  try {
+    const res = await defaultUsernameApi();
+    if (res?.username) {
+      form.username = res.username;
+      form.rememberMe = true;
+    }
+  } catch (_) {
+    // 获取失败时回退到 localStorage 中的记住用户名
+    const rememberedUsername = localStorage.getItem('rememberedUsername');
+    if (rememberedUsername) {
+      form.username = rememberedUsername;
+      form.rememberMe = true;
+    }
   }
-  
+
   initParticles();
   animate();
   window.addEventListener('resize', handleResize);

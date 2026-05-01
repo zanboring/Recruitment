@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.recruitment.mapper.KnowledgeBaseMapper">
+
+    <resultMap id="KnowledgeBaseResultMap" type="com.example.recruitment.entity.KnowledgeBase">
+        <id column="id" property="id"/>
+        <result column="question" property="question"/>
+        <result column="answer" property="answer"/>
+        <result column="tags" property="tags"/>
+        <result column="source" property="source"/>
+        <result column="usage_count" property="usageCount"/>
+        <result column="status" property="status"/>
+        <result column="quality_score" property="qualityScore"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <!-- 插入 -->
+    <insert id="insert" parameterType="com.example.recruitment.entity.KnowledgeBase" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO knowledge_base (question, answer, tags, source, usage_count, status, quality_score)
+        VALUES (#{question}, #{answer}, #{tags}, #{source}, #{usageCount}, #{status}, #{qualityScore})
+    </insert>
+
+    <!-- 批量插入 -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO knowledge_base (question, answer, tags, source, usage_count, status, quality_score)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.question}, #{item.answer}, #{item.tags}, #{item.source}, #{item.usageCount}, #{item.status}, #{item.qualityScore})
+        </foreach>
+    </insert>
+
+    <!-- 更新 -->
+    <update id="update" parameterType="com.example.recruitment.entity.KnowledgeBase">
+        UPDATE knowledge_base
+        <set>
+            <if test="question != null">question = #{question},</if>
+            <if test="answer != null">answer = #{answer},</if>
+            <if test="tags != null">tags = #{tags},</if>
+            <if test="source != null">source = #{source},</if>
+            <if test="usageCount != null">usage_count = #{usageCount},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="qualityScore != null">quality_score = #{qualityScore},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- 删除 -->
+    <delete id="deleteById">
+        DELETE FROM knowledge_base WHERE id = #{id}
+    </delete>
+
+    <!-- 根据ID查询 -->
+    <select id="selectById" resultMap="KnowledgeBaseResultMap">
+        SELECT * FROM knowledge_base WHERE id = #{id}
+    </select>
+
+    <!-- 查询所有启用的 -->
+    <select id="selectAllEnabled" resultMap="KnowledgeBaseResultMap">
+        SELECT * FROM knowledge_base WHERE status = 1 ORDER BY quality_score DESC, usage_count DESC
+    </select>
+
+    <!-- 关键词搜索：匹配问题或标签 -->
+    <select id="searchByKeyword" resultMap="KnowledgeBaseResultMap">
+        SELECT * FROM knowledge_base
+        WHERE status = 1
+          AND (question LIKE CONCAT('%', #{keyword}, '%')
+               OR tags LIKE CONCAT('%', #{keyword}, '%')
+               OR answer LIKE CONCAT('%', #{keyword}, '%'))
+        ORDER BY quality_score DESC, usage_count DESC
+    </select>
+
+    <!-- 根据标签查询 -->
+    <select id="selectByTags" resultMap="KnowledgeBaseResultMap">
+        SELECT * FROM knowledge_base
+        WHERE status = 1
+          AND FIND_IN_SET(#{tags}, tags) > 0
+        ORDER BY usage_count DESC
+    </select>
+
+    <!-- 增加使用次数 -->
+    <update id="incrementUsageCount">
+        UPDATE knowledge_base SET usage_count = usage_count + 1 WHERE id = #{id}
+    </update>
+
+    <!-- 查询高质量记录 -->
+    <select id="selectHighQuality" resultMap="KnowledgeBaseResultMap">
+        SELECT * FROM knowledge_base
+        WHERE status = 1 AND quality_score >= #{minScore}
+        ORDER BY quality_score DESC, usage_count DESC
+    </select>
+
+    <!-- 分页查询 -->
+    <select id="selectByPage" resultMap="KnowledgeBaseResultMap">
+        SELECT * FROM knowledge_base
+        ORDER BY created_at DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <!-- 统计总数 -->
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM knowledge_base
+    </select>
+
+    <!-- 检查是否存在相似问题 -->
+    <select id="selectBySimilarQuestion" resultMap="KnowledgeBaseResultMap">
+        SELECT * FROM knowledge_base
+        WHERE status = 1
+          AND (question = #{question}
+               OR question LIKE CONCAT('%', #{question}, '%')
+               OR #{question} LIKE CONCAT('%', question, '%'))
+        LIMIT 1
+    </select>
+
+</mapper>

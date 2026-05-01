@@ -1,6 +1,7 @@
 package com.example.recruitment.config;
 
 import com.example.recruitment.util.JwtUtil;
+import jakarta.annotation.Nonnull;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,9 +40,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     public static final String TOKEN_PREFIX = "Bearer ";
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(@Nonnull HttpServletRequest request,
+                                    @Nonnull HttpServletResponse response,
+                                    @Nonnull FilterChain filterChain) throws ServletException, IOException {
         if (request == null || response == null || filterChain == null) {
             filterChain.doFilter(request, response);
             return;
@@ -73,7 +74,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception e) {
-            logger.debug("JWT过滤失败: " + e.getMessage());
+            logger.warn("JWT认证失败: " + e.getMessage());
         }
 
         filterChain.doFilter(request, response);

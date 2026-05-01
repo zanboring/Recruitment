@@ -1,7 +1,7 @@
 <template>
   <div class="dashboard">
     <!-- 统计卡片区域 -->
-    <el-row :gutter="[16, 16]" class="stat-row">
+    <el-row :gutter="16" class="stat-row">
       <el-col :xs="24" :sm="12" :md="6" v-for="(stat, index) in statCards" :key="index">
         <el-card class="stat-card" shadow="hover">
           <div class="stat-card-inner">
@@ -33,7 +33,7 @@
     </el-row>
 
     <!-- 图表区域 -->
-    <el-row :gutter="[16, 16]" style="margin-top: 20px">
+    <el-row :gutter="16" style="margin-top: 20px">
       <el-col :xs="24" :md="12">
         <el-card class="chart-card" shadow="hover">
           <template #header>
@@ -64,7 +64,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="[16, 16]" style="margin-top: 20px">
+    <el-row :gutter="16" style="margin-top: 20px">
       <el-col :xs="24" :md="12">
         <el-card class="chart-card" shadow="hover">
           <template #header>
@@ -95,7 +95,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="[16, 16]" style="margin-top: 20px">
+    <el-row :gutter="16" style="margin-top: 20px">
       <el-col :span="24">
         <el-card class="chart-card" shadow="hover">
           <template #header>
@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, onUnmounted, ref, computed } from 'vue';
 import { Briefcase, OfficeBuilding, Money, TrendCharts, PieChart, Histogram, DataAnalysis, Star, ArrowUp, ArrowDown } from '@element-plus/icons-vue';
 import * as echarts from 'echarts';
 import {
@@ -134,6 +134,9 @@ const salaryChartRef = ref<HTMLDivElement | null>(null);
 const skillChartRef = ref<HTMLDivElement | null>(null);
 const requirementChartRef = ref<HTMLDivElement | null>(null);
 const titleChartRef = ref<HTMLDivElement | null>(null);
+
+// [优化] 收集所有 ECharts 实例，用于组件卸载时统一 dispose 和窗口 resize
+const chartInstances: echarts.ECharts[] = [];
 
 const jobCount = ref(0);
 const companyCount = ref(0);
@@ -236,6 +239,7 @@ const init = async () => {
   // 城市分布饼图 - 带动画效果
   if (cityChartRef.value) {
     const chart = echarts.init(cityChartRef.value);
+    chartInstances.push(chart);
     chart.setOption({
       tooltip: {
         trigger: 'item',
@@ -286,6 +290,7 @@ const init = async () => {
   // 薪资分布柱状图
   if (salaryChartRef.value) {
     const chart = echarts.init(salaryChartRef.value);
+    chartInstances.push(chart);
     chart.setOption({
       tooltip: {
         trigger: 'axis',
@@ -338,6 +343,7 @@ const init = async () => {
   // 技能需求排名横向柱状图
   if (skillChartRef.value) {
     const chart = echarts.init(skillChartRef.value);
+    chartInstances.push(chart);
     const topSkills = (skillData || []).slice(0, 10);
     chart.setOption({
       tooltip: {
@@ -398,6 +404,7 @@ const init = async () => {
   // 学历/经验要求双柱状图
   if (requirementChartRef.value) {
     const chart = echarts.init(requirementChartRef.value);
+    chartInstances.push(chart);
     const axis = buildAxis(eduData, expData);
     chart.setOption({
       tooltip: {
@@ -467,6 +474,7 @@ const init = async () => {
   // 热门岗位TOP10
   if (titleChartRef.value) {
     const chart = echarts.init(titleChartRef.value);
+    chartInstances.push(chart);
     chart.setOption({
       tooltip: {
         trigger: 'axis',
@@ -539,6 +547,28 @@ const toSeries = (axis: string[], source: any[]) => {
 
 onMounted(() => {
   init().catch(() => undefined);
+  // [优化] 监听窗口 resize，自动调整所有图表大小
+  window.addEventListener('resize', handleChartsResize);
+});
+
+// [优化] 窗口 resize 处理函数
+const handleChartsResize = () => {
+  chartInstances.forEach(chart => {
+    if (chart && !chart.isDisposed()) {
+      chart.resize();
+    }
+  });
+};
+
+// [优化] 组件卸载时释放所有图表实例，防止内存泄漏
+onUnmounted(() => {
+  window.removeEventListener('resize', handleChartsResize);
+  chartInstances.forEach(chart => {
+    if (chart && !chart.isDisposed()) {
+      chart.dispose();
+    }
+  });
+  chartInstances.length = 0;
 });
 </script>
 

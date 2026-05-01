@@ -137,7 +137,7 @@ public class DataServiceImpl implements DataService {
     public int cleanupAllData() {
         int deletedJobs = jobMapper.deleteAll();
         int deletedTasks = crawlTaskMapper.deleteAll();
-        log.info("数据清洗完成: 删除岗位{}条, 删除任务{}条", deletedJobs, deletedTasks);
+        log.warn("[数据清洗操作] 删除岗位{}条, 删除任务{}条", deletedJobs, deletedTasks);
         return deletedJobs;
     }
 

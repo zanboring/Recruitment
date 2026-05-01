@@ -16,11 +16,11 @@
           <el-form :model="form" label-width="100px" style="margin-top: 16px" size="large">
             <el-form-item label="数据来源">
               <el-checkbox-group v-model="form.sourceSites">
-                <el-checkbox label="boss">BOSS直聘</el-checkbox>
-                <el-checkbox label="zhaopin">智联招聘</el-checkbox>
-                <el-checkbox label="51job">前程无忧</el-checkbox>
-                <el-checkbox label="liepin">猎聘</el-checkbox>
-                <el-checkbox label="lagou">拉勾网</el-checkbox>
+                <el-checkbox value="boss">BOSS直聘</el-checkbox>
+                <el-checkbox value="zhaopin">智联招聘</el-checkbox>
+                <el-checkbox value="51job">前程无忧</el-checkbox>
+                <el-checkbox value="liepin">猎聘</el-checkbox>
+                <el-checkbox value="lagou">拉勾网</el-checkbox>
               </el-checkbox-group>
             </el-form-item>
             <el-form-item label="关键词">

@@ -101,8 +101,3 @@ const formatSalary = (min?: number | string, max?: number | string): string => {
 .recommend-count { color: var(--text-secondary); font-size: 13px; }
 .salary-text { color: #e6a23c; font-weight: 600; }
 </style>
-
-<script lang="ts">
-import { computed } from 'vue';
-export default { inheritAttrs: false };
-</script>

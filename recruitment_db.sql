@@ -14,10 +14,12 @@ CREATE TABLE user (
     salt VARCHAR(64) NOT NULL COMMENT '密码盐',
     role VARCHAR(20) NOT NULL DEFAULT 'USER' COMMENT '角色：ADMIN/USER',
     email VARCHAR(100) COMMENT '邮箱',
+    login_fail_count INT NOT NULL DEFAULT 0 COMMENT '登录失败次数',
+    locked_until DATETIME COMMENT '账户锁定截止时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
--- 默认管理员账号（用户名：admin，密码：123456）
+-- 默认管理员账号（密码需通过环境变量或配置文件设置）
 INSERT INTO user (username, password, salt, role, email, created_at)
 VALUES ('admin', 'ZDoWXd+YGTGxeMkoxzJp2YevU/WOkv4dqxI+V7mkpQ8=', 'recruitment-salt-001', 'ADMIN', 'admin@example.com', NOW());
 

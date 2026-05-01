@@ -23,6 +23,9 @@ public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
+    
+    private static final int MAX_LOGIN_FAIL_COUNT = 5;
+    private static final int LOCK_DURATION_MINUTES = 30;
 
     @Override
     public UserVO login(UserLoginDTO dto) {
@@ -34,10 +37,31 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("用户不存在");
         }
         
-        String hash = PasswordUtil.hashPassword(dto.getPassword(), user.getSalt());
-        if (!hash.equals(user.getPassword())) {
-            log.warn("登录失败: 密码错误 - username={}", dto.getUsername());
-            throw new BusinessException("用户名或密码错误");
+        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
+            log.warn("登录失败: 账户已锁定 - username={}, lockedUntil={}", dto.getUsername(), user.getLockedUntil());
+            throw new BusinessException("账户已锁定，请稍后再试");
+        }
+        
+        if (!PasswordUtil.verify(dto.getPassword(), user.getPassword())) {
+            int failCount = (user.getLoginFailCount() == null ? 0 : user.getLoginFailCount()) + 1;
+            user.setLoginFailCount(failCount);
+            
+            if (failCount >= MAX_LOGIN_FAIL_COUNT) {
+                user.setLockedUntil(LocalDateTime.now().plusMinutes(LOCK_DURATION_MINUTES));
+                userMapper.update(user);
+                log.warn("登录失败: 账户已锁定 - username={}, failCount={}", dto.getUsername(), failCount);
+                throw new BusinessException("账户已锁定，请" + LOCK_DURATION_MINUTES + "分钟后再试");
+            }
+            
+            userMapper.update(user);
+            log.warn("登录失败: 密码错误 - username={}, failCount={}", dto.getUsername(), failCount);
+            throw new BusinessException("用户名或密码错误，剩余尝试次数: " + (MAX_LOGIN_FAIL_COUNT - failCount));
+        }
+        
+        if (user.getLoginFailCount() != null && user.getLoginFailCount() > 0) {
+            user.setLoginFailCount(0);
+            user.setLockedUntil(null);
+            userMapper.update(user);
         }
         
         UserVO vo = new UserVO();
@@ -45,7 +69,6 @@ public class UserServiceImpl implements UserService {
         vo.setUsername(user.getUsername());
         vo.setRole(user.getRole());
         vo.setEmail(user.getEmail());
-        // 生成 JWT Token（替代之前的 UUID）
         vo.setToken(jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole()));
         
         log.info("用户登录成功: userId={}, username={}, role={}", user.getId(), user.getUsername(), user.getRole());
@@ -64,12 +87,12 @@ public class UserServiceImpl implements UserService {
         
         User user = new User();
         user.setUsername(dto.getUsername());
-        String salt = PasswordUtil.generateSalt();
-        user.setSalt(salt);
-        user.setPassword(PasswordUtil.hashPassword(dto.getPassword(), salt));
+        user.setPassword(PasswordUtil.hashPassword(dto.getPassword()));
+        user.setSalt("");
         user.setRole("USER");
         user.setEmail(dto.getEmail());
         user.setCreatedAt(LocalDateTime.now());
+        user.setLoginFailCount(0);
         
         userMapper.insert(user);
         
@@ -86,8 +109,7 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("用户不存在");
         }
         
-        String oldHash = PasswordUtil.hashPassword(dto.getOldPassword(), user.getSalt());
-        if (!oldHash.equals(user.getPassword())) {
+        if (!PasswordUtil.verify(dto.getOldPassword(), user.getPassword())) {
             log.warn("修改密码失败: 旧密码错误 - userId={}", userId);
             throw new BusinessException("旧密码错误");
         }
@@ -97,11 +119,7 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("两次输入的密码不一致");
         }
         
-        String newSalt = PasswordUtil.generateSalt();
-        String newHash = PasswordUtil.hashPassword(dto.getNewPassword(), newSalt);
-        
-        user.setSalt(newSalt);
-        user.setPassword(newHash);
+        user.setPassword(PasswordUtil.hashPassword(dto.getNewPassword()));
         userMapper.update(user);
         
         log.info("密码修改成功: userId={}, username={}", user.getId(), user.getUsername());
@@ -127,4 +145,3 @@ public class UserServiceImpl implements UserService {
         return vo;
     }
 }
-

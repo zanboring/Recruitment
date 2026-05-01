@@ -27,7 +27,7 @@
       </div>
       <div class="message-content">
         <div class="message-text" v-if="message.role === 'user'">{{ message.content }}</div>
-        <div class="message-text markdown-body" v-else v-html="renderMarkdown(message.content)"></div>
+        <div class="message-text markdown-body" v-else v-html="sanitizeHtml(renderMarkdown(message.content))"></div>
         <div class="message-time">{{ message.timestamp }}</div>
         <div class="message-status" v-if="message.role === 'ai'">
           <el-icon class="status-icon"><Check /></el-icon>
@@ -63,6 +63,21 @@ import { ref } from 'vue';
 import { User, ChatLineRound, Loading, CircleCloseFilled, Check } from '@element-plus/icons-vue';
 import WelcomeMessage from './WelcomeMessage.vue';
 import { renderMarkdown } from '../utils/markdownRenderer';
+
+// [安全优化] HTML消毒函数 - 移除script标签和事件属性，防止XSS攻击
+// 建议后续安装 DOMPurify (npm install dompurify @types/dompurify) 替代此简易实现
+function sanitizeHtml(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+    .replace(/<embed\b[^>]*>/gi, '')
+    .replace(/javascript\s*:/gi, '')
+    .replace(/vbscript\s*:/gi, '')
+    .replace(/data\s*:\s*text\/html/gi, '');
+}
 
 interface Message {
   role: 'user' | 'ai';

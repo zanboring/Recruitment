@@ -31,17 +31,17 @@
         清洗数据库
       </el-button>
 
-      <el-button type="primary" size="large" @click="startQuickCrawl" :loading="quickCrawling" :disabled="quickCrawling">
+      <el-button type="primary" size="large" @click="handleQuickCrawl" :loading="quickCrawling" :disabled="quickCrawling">
         <el-icon><Connection /></el-icon>
         一键实时爬取
       </el-button>
 
-      <el-button type="warning" size="large" @click="showCrawlDialog = true">
+      <el-button type="warning" size="large" @click="handleOpenCrawlDialog">
         <el-icon><Connection /></el-icon>
         创建爬虫任务
       </el-button>
 
-      <el-button type="info" size="large" @click="loadData">
+      <el-button type="info" size="large" @click="handleRefreshData">
         <el-icon><Refresh /></el-icon>
         刷新数据
       </el-button>
@@ -133,6 +133,21 @@ const cleanupDatabase = async () => {
       ElMessage.error('数据库清洗失败');
     }
   }
+};
+
+// 一键爬取按钮点击
+const handleQuickCrawl = () => {
+  emit('startQuickCrawl');
+};
+
+// 打开创建爬虫任务对话框
+const handleOpenCrawlDialog = () => {
+  showCrawlDialog.value = true;
+};
+
+// 刷新数据按钮点击
+const handleRefreshData = () => {
+  emit('loadData');
 };
 
 // 暴露给父组件

@@ -135,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import * as echarts from 'echarts';
 import { ElMessage } from 'element-plus';
 import {
@@ -169,6 +169,9 @@ const educationChartRef = ref<HTMLDivElement | null>(null);
 const experienceChartRef = ref<HTMLDivElement | null>(null);
 const companyChartRef = ref<HTMLDivElement | null>(null);
 
+// [优化] 收集所有 ECharts 实例，用于组件卸载时统一 dispose 和窗口 resize
+const chartInstances: echarts.ECharts[] = [];
+
 const init = async () => {
   try {
     const [summaryText, cityData, skillData, salaryRangeData, topTitles, educationData, experienceData, companyData] = await Promise.all([
@@ -188,6 +191,7 @@ const init = async () => {
 
     if (cityChartRef.value) {
       const chart = echarts.init(cityChartRef.value);
+      chartInstances.push(chart);
       chart.setOption({
         tooltip: { 
           trigger: 'item',
@@ -225,6 +229,7 @@ const init = async () => {
 
     if (titleChartRef.value) {
       const chart = echarts.init(titleChartRef.value);
+      chartInstances.push(chart);
       chart.setOption({
         tooltip: {
           trigger: 'axis',
@@ -263,6 +268,7 @@ const init = async () => {
 
     if (salaryChartRef.value) {
       const chart = echarts.init(salaryChartRef.value);
+      chartInstances.push(chart);
       chart.setOption({
         tooltip: {
           trigger: 'axis',
@@ -296,6 +302,7 @@ const init = async () => {
 
     if (skillChartRef.value) {
       const chart = echarts.init(skillChartRef.value);
+      chartInstances.push(chart);
       chart.setOption({
         tooltip: {
           trigger: 'axis',
@@ -333,6 +340,7 @@ const init = async () => {
 
     if (educationChartRef.value) {
       const chart = echarts.init(educationChartRef.value);
+      chartInstances.push(chart);
       chart.setOption({
         tooltip: {
           trigger: 'item',
@@ -361,6 +369,7 @@ const init = async () => {
 
     if (experienceChartRef.value) {
       const chart = echarts.init(experienceChartRef.value);
+      chartInstances.push(chart);
       chart.setOption({
         tooltip: {
           trigger: 'axis',
@@ -394,6 +403,7 @@ const init = async () => {
 
     if (companyChartRef.value) {
       const chart = echarts.init(companyChartRef.value);
+      chartInstances.push(chart);
       chart.setOption({
         tooltip: {
           trigger: 'axis',
@@ -437,6 +447,28 @@ const exportReport = () => {
 
 onMounted(() => {
   init();
+  // [优化] 监听窗口 resize，自动调整所有图表大小
+  window.addEventListener('resize', handleChartsResize);
+});
+
+// [优化] 窗口 resize 处理函数
+const handleChartsResize = () => {
+  chartInstances.forEach(chart => {
+    if (chart && !chart.isDisposed()) {
+      chart.resize();
+    }
+  });
+};
+
+// [优化] 组件卸载时释放所有图表实例，防止内存泄漏
+onUnmounted(() => {
+  window.removeEventListener('resize', handleChartsResize);
+  chartInstances.forEach(chart => {
+    if (chart && !chart.isDisposed()) {
+      chart.dispose();
+    }
+  });
+  chartInstances.length = 0;
 });
 </script>
 
