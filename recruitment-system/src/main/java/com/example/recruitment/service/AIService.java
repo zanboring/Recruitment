@@ -153,16 +153,12 @@ public class AIService {
                     }
                     String content = extractStreamContent(data);
                     if (content != null && !content.isEmpty()) {
-                        // 清理：移除换行符和多余空格
-                        String cleaned = content.replace("\n", "").replace("\r", "").replaceAll("\\s+", " ");
-                        currentLine.append(cleaned);
+                        currentLine.append(content);
 
-                        // 逻辑：收集内容直到遇到句号/问号/感叹号，或者缓冲满
-                        // 这样每个完整句子作为一行发送
                         if (currentLine.length() >= MAX_LINE_BUFFER) {
-                            String toSend = currentLine.toString().trim();
+                            String toSend = currentLine.toString();
                             if (!toSend.isEmpty()) {
-                                emitter.send(SseEmitter.event().name("message").data(toSend + "\n"));
+                                emitter.send(SseEmitter.event().name("message").data(toSend));
                             }
                             currentLine.setLength(0);
                         }
@@ -254,11 +250,7 @@ public class AIService {
             JsonNode node = objectMapper.readTree(data);
             String content = node.path("choices").path(0).path("delta").path("content").asText("");
             if (content != null && !content.isEmpty()) {
-                // 过滤掉换行符，避免前端每个词都换行
-                content = content.replace("\n", "").replace("\r", "");
-                if (!content.isEmpty()) {
-                    return content;
-                }
+                return content;
             }
         } catch (Exception e) {
             log.debug("流式JSON解析异常: {}", e.getMessage());

@@ -40,6 +40,7 @@ public class OllamaServiceImpl implements OllamaService {
     private static final int CONNECT_TIMEOUT_MS = 10000;
     private static final int READ_TIMEOUT_SYNC_MS = 120000;
     private static final int READ_TIMEOUT_STREAM_MS = 180000;
+    private static final int MAX_LINE_BUFFER = 150;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicBoolean availableCache = new AtomicBoolean(false);
@@ -145,18 +146,29 @@ public class OllamaServiceImpl implements OllamaService {
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
+            StringBuilder currentLine = new StringBuilder();
+
             while ((line = br.readLine()) != null) {
                 if (line.isBlank()) continue;
-                
+
                 String content = extractStreamContent(line);
                 if (content != null && !content.isEmpty()) {
-                    emitter.send(SseEmitter.event().name("message").data(content));
-                    try {
-                        Thread.sleep(20);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
+                    currentLine.append(content);
+
+                    if (currentLine.length() >= MAX_LINE_BUFFER) {
+                        String toSend = currentLine.toString();
+                        if (!toSend.isEmpty()) {
+                            emitter.send(SseEmitter.event().name("message").data(toSend));
+                        }
+                        currentLine.setLength(0);
                     }
+                }
+            }
+
+            if (currentLine.length() > 0) {
+                String toSend = currentLine.toString();
+                if (!toSend.isEmpty()) {
+                    emitter.send(SseEmitter.event().name("message").data(toSend));
                 }
             }
         }
