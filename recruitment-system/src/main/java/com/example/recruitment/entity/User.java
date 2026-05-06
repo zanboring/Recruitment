@@ -12,6 +12,10 @@ public class User {
     private LocalDateTime createdAt;
     private Integer loginFailCount = 0;
     private LocalDateTime lockedUntil;
+    
+    private String skills;
+    private String education;
+    private Integer experienceYears;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -31,4 +35,11 @@ public class User {
     public void setLoginFailCount(Integer loginFailCount) { this.loginFailCount = loginFailCount; }
     public LocalDateTime getLockedUntil() { return lockedUntil; }
     public void setLockedUntil(LocalDateTime lockedUntil) { this.lockedUntil = lockedUntil; }
+    
+    public String getSkills() { return skills; }
+    public void setSkills(String skills) { this.skills = skills; }
+    public String getEducation() { return education; }
+    public void setEducation(String education) { this.education = education; }
+    public Integer getExperienceYears() { return experienceYears; }
+    public void setExperienceYears(Integer experienceYears) { this.experienceYears = experienceYears; }
 }
