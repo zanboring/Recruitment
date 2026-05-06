@@ -1,12 +1,14 @@
 package com.example.recruitment.service.impl;
 
 import com.example.recruitment.dto.JobQueryDTO;
+import com.example.recruitment.dto.JobRecommendDTO;
 import com.example.recruitment.entity.Job;
 import com.example.recruitment.exception.BusinessException;
 import com.example.recruitment.mapper.JobMapper;
 import com.example.recruitment.service.AIService;
 import com.example.recruitment.service.JobService;
 import com.example.recruitment.vo.AIFeedbackVO;
+import com.example.recruitment.vo.JobRecommendVO;
 import com.example.recruitment.vo.JobTrendVO;
 import com.example.recruitment.vo.JobStatVO;
 import com.github.pagehelper.PageHelper;
@@ -776,6 +778,191 @@ public class JobServiceImpl implements JobService {
         suggestions.add("面试时突出项目经验和实际问题解决能力，展示个人技术成长空间。");
 
         return suggestions;
+    }
+
+    // ==================== 多级权重合成技能契合算法实现 ====================
+
+    // 学历等级定义（用于计算学历契合度）
+    private static final Map<String, Integer> EDUCATION_LEVEL = new HashMap<>();
+    static {
+        EDUCATION_LEVEL.put("初中及以下", 1);
+        EDUCATION_LEVEL.put("高中", 2);
+        EDUCATION_LEVEL.put("中专", 3);
+        EDUCATION_LEVEL.put("大专", 4);
+        EDUCATION_LEVEL.put("本科", 5);
+        EDUCATION_LEVEL.put("硕士", 6);
+        EDUCATION_LEVEL.put("博士", 7);
+        EDUCATION_LEVEL.put("不限", 0);
+    }
+
+    // 经验年限映射（用于从经验字符串提取年限）
+    private static final Map<String, Integer> EXPERIENCE_YEARS = new HashMap<>();
+    static {
+        EXPERIENCE_YEARS.put("应届", 0);
+        EXPERIENCE_YEARS.put("经验不限", 0);
+        EXPERIENCE_YEARS.put("1年以下", 0);
+        EXPERIENCE_YEARS.put("1-3年", 2);
+        EXPERIENCE_YEARS.put("3-5年", 4);
+        EXPERIENCE_YEARS.put("5-10年", 7);
+        EXPERIENCE_YEARS.put("10年以上", 10);
+        EXPERIENCE_YEARS.put("不限", 0);
+    }
+
+    // 权重配置
+    private static final double SKILL_WEIGHT = 0.7;
+    private static final double EDUCATION_WEIGHT = 0.2;
+    private static final double EXPERIENCE_WEIGHT = 0.1;
+
+    @Override
+    public List<JobRecommendVO> intelligentRecommend(JobRecommendDTO dto) {
+        JobQueryDTO queryDto = new JobQueryDTO();
+        queryDto.setCity(dto.getCity());
+        queryDto.setPageNum(1);
+        queryDto.setPageSize(200);
+        
+        List<Job> jobs = jobMapper.selectByCondition(queryDto);
+        
+        if (jobs.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        String userSkills = dto.getSkills();
+        String userEducation = dto.getEducation();
+        Integer userExperienceYears = dto.getExperienceYears();
+
+        return jobs.stream()
+                .map(job -> calculateMatchScore(job, userSkills, userEducation, userExperienceYears))
+                .filter(vo -> vo.getOverallScore().compareTo(BigDecimal.ZERO) > 0)
+                .sorted(Comparator.comparing(JobRecommendVO::getOverallScore).reversed())
+                .limit(dto.getLimit() != null ? dto.getLimit() : 10)
+                .collect(Collectors.toList());
+    }
+
+    private JobRecommendVO calculateMatchScore(Job job, String userSkills, String userEducation, Integer userExperienceYears) {
+        JobRecommendVO vo = new JobRecommendVO();
+        vo.setJobId(job.getId());
+        vo.setTitle(job.getTitle());
+        vo.setCompanyName(job.getCompanyName());
+        vo.setCity(job.getCity());
+        vo.setSalary(formatSalary(job.getMinSalary(), job.getMaxSalary()));
+        vo.setSkills(job.getSkills());
+        vo.setEducation(job.getEducation());
+        vo.setExperience(job.getExperience());
+
+        BigDecimal skillScore = calculateSkillMatchScore(userSkills, job.getSkills());
+        BigDecimal educationScore = calculateEducationMatchScore(userEducation, job.getEducation());
+        BigDecimal experienceScore = calculateExperienceMatchScore(userExperienceYears, job.getExperience());
+
+        BigDecimal overallScore = skillScore.multiply(BigDecimal.valueOf(SKILL_WEIGHT))
+                .add(educationScore.multiply(BigDecimal.valueOf(EDUCATION_WEIGHT)))
+                .add(experienceScore.multiply(BigDecimal.valueOf(EXPERIENCE_WEIGHT)));
+
+        vo.setSkillMatchScore(skillScore);
+        vo.setEducationMatchScore(educationScore);
+        vo.setExperienceMatchScore(experienceScore);
+        vo.setOverallScore(overallScore);
+
+        return vo;
+    }
+
+    /**
+     * 计算技能契合度 - 使用Jaccard相似系数
+     * Jaccard系数 = 两个集合的交集大小 / 并集大小
+     */
+    private BigDecimal calculateSkillMatchScore(String userSkills, String jobSkills) {
+        if (userSkills == null || userSkills.isEmpty() || jobSkills == null || jobSkills.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+
+        Set<String> userSkillSet = Arrays.stream(userSkills.toLowerCase().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+
+        Set<String> jobSkillSet = Arrays.stream(jobSkills.toLowerCase().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+
+        if (userSkillSet.isEmpty() || jobSkillSet.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+
+        // 计算交集
+        long intersection = userSkillSet.stream()
+                .filter(jobSkillSet::contains)
+                .count();
+
+        // 计算并集
+        Set<String> union = new HashSet<>(userSkillSet);
+        union.addAll(jobSkillSet);
+
+        if (union.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+
+        // Jaccard相似系数
+        double jaccard = (double) intersection / union.size();
+        return BigDecimal.valueOf(jaccard * 100).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 计算学历契合度
+     * 规则：
+     * - 用户学历正好达到岗位要求：100%
+     * - 用户学历超出要求至少一个级别：80%
+     * - 用户学历低于岗位要求：20%
+     */
+    private BigDecimal calculateEducationMatchScore(String userEducation, String jobEducation) {
+        if (userEducation == null || userEducation.isEmpty() || 
+            jobEducation == null || jobEducation.isEmpty()) {
+            return BigDecimal.valueOf(50);
+        }
+
+        Integer userLevel = EDUCATION_LEVEL.getOrDefault(userEducation, 0);
+        Integer jobLevel = EDUCATION_LEVEL.getOrDefault(jobEducation, 0);
+
+        if (jobLevel == 0) {
+            return BigDecimal.valueOf(80);
+        }
+
+        if (userLevel == jobLevel) {
+            return BigDecimal.valueOf(100);
+        } else if (userLevel >= jobLevel + 1) {
+            return BigDecimal.valueOf(80);
+        } else {
+            return BigDecimal.valueOf(20);
+        }
+    }
+
+    /**
+     * 计算工作经验契合度
+     * 规则：考量应聘者实际工作时长与岗位所需经验时长的契合程度，设有±1的灵活范围
+     */
+    private BigDecimal calculateExperienceMatchScore(Integer userYears, String jobExperience) {
+        if (userYears == null || userYears < 0 || jobExperience == null || jobExperience.isEmpty()) {
+            return BigDecimal.valueOf(50);
+        }
+
+        Integer jobYears = EXPERIENCE_YEARS.getOrDefault(jobExperience, 0);
+
+        if (jobYears == 0) {
+            return BigDecimal.valueOf(80);
+        }
+
+        int diff = Math.abs(userYears - jobYears);
+
+        if (diff == 0) {
+            return BigDecimal.valueOf(100);
+        } else if (diff <= 1) {
+            return BigDecimal.valueOf(85);
+        } else if (diff <= 2) {
+            return BigDecimal.valueOf(70);
+        } else if (diff <= 3) {
+            return BigDecimal.valueOf(50);
+        } else {
+            return BigDecimal.valueOf(30);
+        }
     }
 }
 

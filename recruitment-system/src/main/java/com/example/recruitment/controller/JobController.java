@@ -2,9 +2,11 @@ package com.example.recruitment.controller;
 
 import com.example.recruitment.common.Result;
 import com.example.recruitment.dto.JobQueryDTO;
+import com.example.recruitment.dto.JobRecommendDTO;
 import com.example.recruitment.entity.Job;
 import com.example.recruitment.service.JobService;
 import com.example.recruitment.vo.AIFeedbackVO;
+import com.example.recruitment.vo.JobRecommendVO;
 import com.example.recruitment.vo.JobStatVO;
 import com.github.pagehelper.PageInfo;
 import io.swagger.v3.oas.annotations.Operation;
@@ -129,11 +131,19 @@ public class JobController {
     }
 
     @GetMapping("/recommend")
-    @Operation(summary = "岗位推荐", description = "根据技能和城市推荐岗位")
+    @Operation(summary = "岗位推荐", description = "根据技能和城市推荐岗位（基础版）")
     public Result<List<Job>> recommend(@RequestParam(required = false) String skills,
                                        @RequestParam(required = false) String city) {
         log.info("岗位推荐: skills={}, city={}", skills, city);
         return Result.success(jobService.recommendJobs(skills, city));
+    }
+
+    @PostMapping("/recommend/intelligent")
+    @Operation(summary = "智能岗位推荐", description = "基于多级权重合成算法的智能岗位推荐，综合考量技能契合度(70%)、教育背景(20%)、工作经验(10%)")
+    public Result<List<JobRecommendVO>> intelligentRecommend(@RequestBody JobRecommendDTO dto) {
+        log.info("智能岗位推荐: skills={}, education={}, experienceYears={}, city={}", 
+                dto.getSkills(), dto.getEducation(), dto.getExperienceYears(), dto.getCity());
+        return Result.success(jobService.intelligentRecommend(dto));
     }
 
     @GetMapping("/analysis/summary")
