@@ -1,6 +1,6 @@
 <template>
   <div class="job-card-wrapper" @click="$emit('click', job)">
-  <el-card class="job-card" shadow="hover">
+  <el-card class="job-card" :class="cardClass" shadow="hover">
     <!-- 卡片头部：标题 + 状态标签 -->
     <div class="job-card-header">
       <div class="job-title-wrapper">
@@ -42,13 +42,19 @@
       </el-tag>
     </div>
 
-    <!-- 底部信息栏：来源 + 查看原岗链接 + 发布时间 -->
+    <!-- 底部信息栏：来源 + 操作按钮 + 发布时间 -->
     <div class="job-footer">
       <div class="footer-left">
         <el-tag :type="sourceType" size="small" effect="plain">{{ job.sourceSite || '未知' }}</el-tag>
+        <!-- 【方案A增量】有真实URL时显示"查看原岗"按钮 -->
         <el-button v-if="hasOriginalUrl" type="primary" link size="small"
           @click.stop="$emit('click', job)" class="view-original-btn">
           <el-icon><Link /></el-icon>查看原岗
+        </el-button>
+        <!-- 【方案A增量】下架岗位显示"查找类似岗位"按钮，引导用户搜索同类岗位 -->
+        <el-button v-if="isOffline" type="warning" link size="small"
+          @click.stop="$emit('click', job)" class="view-similar-btn">
+          <el-icon><Search /></el-icon>查找类似岗位
         </el-button>
       </div>
       <span class="publish-time">{{ formattedDate }}</span>
@@ -59,7 +65,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { OfficeBuilding, Location, Reading, Clock, Document, Link } from '@element-plus/icons-vue';
+import { OfficeBuilding, Location, Reading, Clock, Document, Link, Search } from '@element-plus/icons-vue';
 
 interface JobItem {
   id: number; title: string; companyName?: string; sourceSite: string;
@@ -96,6 +102,14 @@ const hasOriginalUrl = computed(() =>
   !!(props.job.url && props.job.url !== '' && !props.job.url.includes('baidu.com'))
 );
 
+/** 【方案A增量】判断岗位是否已下架，用于显示"查找类似岗位"按钮 */
+const isOffline = computed(() => props.job.jobStatus === 'OFFLINE');
+
+/** 【方案A增量】下架岗位卡片整体灰化处理，通过CSS类实现 */
+const cardClass = computed(() => ({
+  'job-card--offline': isOffline.value
+}));
+
 /** 格式化薪资显示 */
 const formattedSalary = computed(() => {
   const min = Number(props.job.minSalary) || 0;
@@ -119,8 +133,8 @@ const formattedDate = computed(() => {
   if (!props.job.publishTime) return '未知';
   const time = props.job.publishTime;
   // 支持 Date 对象或字符串
-  if (time instanceof Date) {
-    return time.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  if (Object.prototype.toString.call(time) === '[object Date]') {
+    return (time as unknown as Date).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
   }
   if (typeof time === 'object' && time !== null && 'toISOString' in time) {
     return String(time).substring(0, 10);
@@ -195,5 +209,21 @@ const getSkillTagType = (index: number | string) => {
 .job-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px dashed var(--border-lighter); }
 .footer-left { display: flex; align-items: center; gap: 8px; }
 .view-original-btn { font-size: 12px; font-weight: 500; }
+/* 【方案A增量】类似岗位按钮样式 */
+.view-similar-btn { font-size: 12px; font-weight: 500; color: #e6a23c; }
+.view-similar-btn:hover { color: #f56c6c; }
 .publish-time { font-size: 12px; color: var(--text-placeholder); }
+
+/* 【方案A增量】下架岗位卡片整体灰化降权视觉效果 */
+.job-card--offline {
+  opacity: 0.72;
+  filter: grayscale(30%);
+}
+.job-card--offline .job-title {
+  color: var(--text-secondary) !important;
+}
+.job-card--offline:hover {
+  opacity: 0.92;
+  filter: grayscale(10%);
+}
 </style>

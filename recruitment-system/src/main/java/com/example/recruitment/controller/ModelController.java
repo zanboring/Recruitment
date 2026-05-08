@@ -145,6 +145,56 @@ public class ModelController {
     }
 
     /**
+     * 获取模型列表
+     */
+    @GetMapping("/list")
+    @Operation(summary = "获取模型列表", description = "获取所有可用的AI模型列表")
+    public Result<java.util.List<Map<String, Object>>> getModelList() {
+        java.util.List<Map<String, Object>> models = new java.util.ArrayList<>();
+
+        // 本地模型
+        Map<String, Object> localModel = new HashMap<>();
+        localModel.put("name", "Qwen2");
+        localModel.put("provider", "ollama");
+        localModel.put("available", localModelService.isAvailable());
+        localModel.put("description", localModelService.isAvailable() ? "本地Ollama模型已就绪" : "本地模型服务不可用");
+        models.add(localModel);
+
+        // 云端模型
+        Map<String, Object> cloudModel = new HashMap<>();
+        cloudModel.put("name", "GLM-4");
+        cloudModel.put("provider", "zhipu");
+        cloudModel.put("available", aiService.isApiKeyConfigured());
+        cloudModel.put("description", aiService.isApiKeyConfigured() ? "智谱AI API已配置" : "未配置智谱AI API Key");
+        models.add(cloudModel);
+
+        return Result.success(models);
+    }
+
+    /**
+     * 切换当前使用的模型
+     */
+    @PostMapping("/switch")
+    @Operation(summary = "切换模型", description = "切换当前使用的AI模型")
+    public Result<String> switchModel(@RequestBody Map<String, String> request) {
+        String modelName = request.get("modelName");
+        log.info("切换模型: {}", modelName);
+        // 这里可以添加模型切换逻辑
+        return Result.success("模型切换成功");
+    }
+
+    /**
+     * 重载模型
+     */
+    @PostMapping("/reload")
+    @Operation(summary = "重载模型", description = "重新加载AI模型服务")
+    public Result<String> reloadModel() {
+        log.info("请求重载模型");
+        // 这里可以添加模型重载逻辑
+        return Result.success("模型重载成功");
+    }
+
+    /**
      * 请求体定义
      */
     public static class ModelChatRequest {

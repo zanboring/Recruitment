@@ -79,9 +79,8 @@ defineProps<{
   previewLoading: boolean;
 }>();
 
-// Emits
 const emit = defineEmits<{
-  (e: 'loadPreviewData'): void;
+  (e: 'loadPreviewData', query: { keyword: string }): void;
 }>();
 
 const previewQuery = reactive({

@@ -126,6 +126,11 @@ public class OllamaServiceImpl implements OllamaService {
 
     @Override
     public void chatStream(String systemPrompt, String userMessage, SseEmitter emitter) throws Exception {
+        chatStream(systemPrompt, userMessage, emitter, null);
+    }
+    
+    @Override
+    public void chatStream(String systemPrompt, String userMessage, SseEmitter emitter, StringBuilder fullResponse) throws Exception {
         if (!isAvailable()) {
             throw new IllegalStateException("Ollama服务不可用");
         }
@@ -154,6 +159,9 @@ public class OllamaServiceImpl implements OllamaService {
                 String content = extractStreamContent(line);
                 if (content != null && !content.isEmpty()) {
                     currentLine.append(content);
+                    if (fullResponse != null) {
+                        fullResponse.append(content);
+                    }
 
                     if (currentLine.length() >= MAX_LINE_BUFFER) {
                         String toSend = currentLine.toString();
@@ -169,6 +177,9 @@ public class OllamaServiceImpl implements OllamaService {
                 String toSend = currentLine.toString();
                 if (!toSend.isEmpty()) {
                     emitter.send(SseEmitter.event().name("message").data(toSend));
+                    if (fullResponse != null) {
+                        fullResponse.append(toSend);
+                    }
                 }
             }
         }

@@ -1,5 +1,6 @@
 package com.example.recruitment.controller;
 
+import com.example.recruitment.annotation.Log;
 import com.example.recruitment.common.Result;
 import com.example.recruitment.dto.ChangePasswordDTO;
 import com.example.recruitment.dto.UserLoginDTO;
@@ -41,6 +42,7 @@ public class AuthController {
 
     @PostMapping("/login")
     @Operation(summary = "用户登录", description = "用户使用用户名和密码登录系统，返回JWT Token")
+    @Log("用户登录")
     public Result<UserVO> login(@Valid @RequestBody UserLoginDTO dto) {
         log.info("用户登录请求: username={}", dto.getUsername());
         UserVO userVO = userService.login(dto);
@@ -105,6 +107,7 @@ public class AuthController {
 
     @PostMapping("/register")
     @Operation(summary = "用户注册", description = "新用户注册账号")
+    @Log("用户注册")
     public Result<Void> register(@Valid @RequestBody UserRegisterDTO dto) {
         log.info("用户注册请求: username={}, email={}", dto.getUsername(), dto.getEmail());
         userService.register(dto);
@@ -114,6 +117,7 @@ public class AuthController {
 
     @PostMapping("/change-password")
     @Operation(summary = "修改密码", description = "用户修改登录密码（需JWT认证）")
+    @Log("修改密码")
     public Result<Void> changePassword(@Valid @RequestBody ChangePasswordDTO dto, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
         if (userId == null) {

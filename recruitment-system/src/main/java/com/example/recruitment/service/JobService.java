@@ -20,6 +20,8 @@ public interface JobService {
 
     void deleteJob(Long id);
 
+    int batchDeleteJobs(List<Long> ids);
+
     Job getJob(Long id);
 
     PageInfo<Job> listJobs(JobQueryDTO dto);
@@ -44,7 +46,7 @@ public interface JobService {
 
     BigDecimal predictSalary(String city, String experience, String education, String skills);
 
-    List<Job> recommendJobs(String skills, String city);
+    List<Job> recommendJobs(String skills, String education, Integer experience, String city);
 
     String buildAnalysisSummary();
 

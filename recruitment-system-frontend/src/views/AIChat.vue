@@ -23,6 +23,7 @@
         :loading="loading"
         @send="handleSend"
         @clear="clearMessages"
+        @stop="handleStop"
       />
 
       <!-- 常用问题 -->
@@ -81,17 +82,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed, onMounted } from 'vue';
-
 // 组件名称（用于 keep-alive include 匹配）
 defineOptions({ name: 'AIChat' });
+import { ref, nextTick, computed, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ChatDotRound, ChatLineSquare } from '@element-plus/icons-vue';
 import { useUserStore } from '@/store/user';
 import { useChatStore } from '@/store/chat';
 import { useModelStore } from '@/store/model';
-
-// 子组件
+import { createSseFetch } from '@/api/http';
 import ChatHeader from './components/ChatHeader.vue';
 import ChatMessageList from './components/ChatMessageList.vue';
 import ChatInput from './components/ChatInput.vue';
@@ -118,6 +117,9 @@ const chatInputRef = ref<any>(null);
 
 // 悬停的标签索引
 const hoveredTag = ref(-1);
+
+// 当前请求的 reader（用于取消）
+let currentReader: ReadableStreamDefaultReader | null = null;
 
 // 常用问题
 const commonQuestions = [
@@ -171,16 +173,9 @@ const handleSend = async (messageText?: string) => {
   const aiIndex = chatStore.createAiPlaceholder();
 
   try {
-    const response = await fetch('/api/ai/stream', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json;charset=UTF-8',
-        'Authorization': `Bearer ${userStore.token}`
-      },
-      body: JSON.stringify({
-        message: actualContent,
-        useLocalModel: modelStore.getUseLocalModelValue()
-      })
+    const response = await createSseFetch('/api/ai/stream', {
+      message: actualContent,
+      useLocalModel: modelStore.getUseLocalModelValue()
     });
 
     if (!response.ok) {
@@ -195,8 +190,8 @@ const handleSend = async (messageText?: string) => {
       return;
     }
 
-    const reader = response.body?.getReader();
-    if (!reader) {
+    currentReader = response.body?.getReader() ?? null;
+    if (!currentReader) {
       chatStore.setAiError(aiIndex, '[错误] 无法读取响应流');
       return;
     }
@@ -205,7 +200,7 @@ const handleSend = async (messageText?: string) => {
     let fullContent = '';
 
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await currentReader.read();
       if (done) break;
 
       const chunk = decoder.decode(value, { stream: true });
@@ -230,6 +225,20 @@ const handleSend = async (messageText?: string) => {
 const retryLastMessage = () => {
   if (chatStore.lastMessage) {
     handleSend(chatStore.lastMessage);
+  }
+};
+
+// 停止当前AI回复
+const handleStop = async () => {
+  if (currentReader) {
+    try {
+      await currentReader.cancel();
+      currentReader = null;
+      chatStore.setLoading(false);
+      ElMessage.info('已停止AI回复');
+    } catch (err) {
+      console.error('停止失败:', err);
+    }
   }
 };
 

@@ -64,6 +64,13 @@
         DELETE FROM job WHERE id = #{id}
     </delete>
 
+    <delete id="batchDelete" parameterType="list">
+        DELETE FROM job WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
     <delete id="deleteAll">
         DELETE FROM job WHERE 1=1
     </delete>
@@ -101,13 +108,27 @@
                 AND j.source_site = #{sourceSite}
             </if>
             <if test="minSalary != null">
-                AND (j.min_salary &gt;= #{minSalary} OR j.max_salary &gt;= #{minSalary})
+                AND j.max_salary &gt;= #{minSalary}
             </if>
             <if test="maxSalary != null">
-                AND (j.min_salary &lt;= #{maxSalary} OR j.max_salary &lt;= #{maxSalary})
+                AND j.min_salary &lt;= #{maxSalary}
             </if>
         </where>
-        ORDER BY j.publish_time DESC
+        ORDER BY 
+            CASE 
+                WHEN j.min_salary &gt;= 8000 AND j.max_salary &lt;= 30000 THEN 1
+                WHEN j.min_salary &gt;= 5000 AND j.max_salary &lt;= 40000 THEN 2
+                ELSE 3
+            END,
+            CASE 
+                WHEN j.skills IS NOT NULL AND j.skills != '' THEN 0
+                ELSE 1
+            END,
+            CASE 
+                WHEN j.city IN ('北京', '上海', '深圳', '广州', '杭州', '长沙') THEN 0
+                ELSE 1
+            END,
+            j.publish_time DESC
     </select>
 
     <select id="statByCity" resultType="com.example.recruitment.vo.JobStatVO">
@@ -256,8 +277,53 @@
     <select id="selectRecentJobs" parameterType="int" resultMap="JobResultMap">
         SELECT * FROM job
         WHERE job_status != 'OFFLINE'
-        AND created_at >= DATE_SUB(NOW(), INTERVAL #{days} DAY)
+          AND created_at >= DATE_SUB(NOW(), INTERVAL #{days} DAY)
         ORDER BY created_at DESC
     </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM job
+    </select>
+
+    <update id="updateById" parameterType="com.example.recruitment.entity.Job">
+        UPDATE job
+        <set>
+            <if test="companyId != null">company_id = #{companyId},</if>
+            <if test="title != null">title = #{title},</if>
+            <if test="companyName != null">company_name = #{companyName},</if>
+            <if test="sourceSite != null">source_site = #{sourceSite},</if>
+            <if test="jobKey != null">job_key = #{jobKey},</if>
+            <if test="jobStatus != null">job_status = #{jobStatus},</if>
+            <if test="city != null">city = #{city},</if>
+            <if test="experience != null">experience = #{experience},</if>
+            <if test="education != null">education = #{education},</if>
+            <if test="minSalary != null">min_salary = #{minSalary},</if>
+            <if test="maxSalary != null">max_salary = #{maxSalary},</if>
+            <if test="salaryUnit != null">salary_unit = #{salaryUnit},</if>
+            <if test="skills != null">skills = #{skills},</if>
+            <if test="jobDesc != null">job_desc = #{jobDesc},</if>
+            <if test="url != null">url = #{url},</if>
+            <if test="publishTime != null">publish_time = #{publishTime},</if>
+            <if test="lastSeenAt != null">last_seen_at = #{lastSeenAt},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectByUniqueKey" parameterType="string" resultMap="JobResultMap">
+        SELECT * FROM job WHERE unique_key = #{uniqueKey} LIMIT 1
+    </select>
+
+    <update id="markAllInactive">
+        UPDATE job SET status = 0 WHERE status != 0
+    </update>
+
+    <update id="activateByUniqueKeys">
+        UPDATE job SET status = 1
+        WHERE unique_key IN
+        <foreach collection="keys" item="k" open="(" separator="," close=")">
+            #{k}
+        </foreach>
+    </update>
+
 </mapper>
 

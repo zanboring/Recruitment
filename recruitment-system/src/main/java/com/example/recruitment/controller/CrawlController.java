@@ -1,5 +1,6 @@
 package com.example.recruitment.controller;
 
+import com.example.recruitment.annotation.Log;
 import com.example.recruitment.common.Result;
 import com.example.recruitment.entity.CrawlTask;
 import com.example.recruitment.service.CrawlService;
@@ -32,6 +33,7 @@ public class CrawlController {
     @PostMapping("/task")
     @Operation(summary = "创建爬虫任务", description = "创建新的数据爬取任务")
     @PreAuthorize("hasAuthority('crawl:manage') or hasRole('ADMIN')")
+    @Log("创建爬虫任务")
     public Result<Long> createTask(@Valid @RequestBody CrawlTask task) {
         log.info("创建爬虫任务: sourceSite={}, keyword={}, city={}", 
             task.getSourceSite(), task.getKeyword(), task.getCity());
@@ -43,6 +45,7 @@ public class CrawlController {
     @PostMapping("/task/{id}/start")
     @Operation(summary = "启动爬虫任务", description = "启动指定的爬虫任务")
     @PreAuthorize("hasAuthority('crawl:manage') or hasRole('ADMIN')")
+    @Log("启动爬虫任务")
     public Result<Void> start(@PathVariable("id") Long id) {
         log.info("启动爬虫任务: taskId={}", id);
         crawlService.startTask(id);
@@ -62,6 +65,7 @@ public class CrawlController {
     @DeleteMapping("/task/{id}")
     @Operation(summary = "删除爬虫任务", description = "删除指定的爬虫任务")
     @PreAuthorize("hasAuthority('crawl:manage') or hasRole('ADMIN')")
+    @Log("删除爬虫任务")
     public Result<Void> deleteTask(@PathVariable("id") Long id) {
         log.info("删除爬虫任务: taskId={}", id);
         crawlService.deleteTask(id);

@@ -97,7 +97,7 @@ const handleFileChange = (file: any) => {
 // 导出数据
 const onExport = async () => {
   try {
-    const res = await http.get('/data/export', { responseType: 'blob' } as any);
+    const res = await http.get('/data/export', { responseType: 'blob' } as any) as Blob;
     // 拦截器对 blob 请求直接返回 Blob 对象，无需再取 .data
     const blobData = res instanceof Blob ? res : new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blobData);

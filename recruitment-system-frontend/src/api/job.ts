@@ -91,7 +91,7 @@ export function predictSalary(params: {
   return http.get('/jobs/predict-salary', { params });
 }
 
-export function recommendJobs(params: { skills?: string; city?: string }): Promise<JobItem[]> {
+export function recommendJobs(params: { skills?: string; education?: string; experience?: number; city?: string }): Promise<JobItem[]> {
   return http.get('/jobs/recommend', { params });
 }
 

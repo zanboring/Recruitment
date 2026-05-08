@@ -57,17 +57,18 @@ public class CrawlServiceImpl implements CrawlService {
     @Value("${crawl.enable-scheduled:true}")
     private boolean enableScheduledCrawl;
 
-    // 招聘平台
+    // 招聘平台映射表
+    // 【优化】前程无忧(51job)和猎聘(liepin)暂不参与爬取（代码保留，接口已禁用）
     private static final Map<String, String> SITE_MAP = new LinkedHashMap<>();
     static {
         SITE_MAP.put("boss", "BOSS");
         SITE_MAP.put("zhaopin", "智联招聘");
-        SITE_MAP.put("51job", "前程无忧");
-        SITE_MAP.put("liepin", "猎聘");
-        SITE_MAP.put("lagou", "拉勾网");
-        SITE_MAP.put("nowcoder", "牛客网");
-        SITE_MAP.put("yingjiesheng", "应届生");
-        SITE_MAP.put("linkedin", "领英");
+        // SITE_MAP.put("51job", "前程无忧");   // 【已禁用】备用数据充足，无需额外来源
+        // SITE_MAP.put("liepin", "猎聘");      // 【已禁用】备用数据充足，无需额外来源
+        // SITE_MAP.put("lagou", "拉勾网");    // 【保留】可按需启用
+        // SITE_MAP.put("nowcoder", "牛客网"); // 【保留】可按需启用
+        // SITE_MAP.put("yingjiesheng", "应届生"); // 【保留】可按需启用
+        // SITE_MAP.put("linkedin", "领英");   // 【保留】可按需启用
     }
 
     private static final List<String> DEFAULT_KEYWORDS = Arrays.asList(
@@ -498,22 +499,56 @@ public class CrawlServiceImpl implements CrawlService {
 
     private String getCityCode(String city) {
         Map<String, String> cityMap = new HashMap<>();
-        cityMap.put("北京", "010");
-        cityMap.put("上海", "020");
-        cityMap.put("广州", "030");
-        cityMap.put("深圳", "040");
-        cityMap.put("杭州", "060");
-        cityMap.put("南京", "070");
-        cityMap.put("成都", "280");
-        cityMap.put("武汉", "180");
-        cityMap.put("西安", "270");
-        cityMap.put("苏州", "070");
-        cityMap.put("重庆", "060");
-        cityMap.put("天津", "050");
-        cityMap.put("长沙", "150");
-        cityMap.put("郑州", "160");
-        cityMap.put("东莞", "030");
-        return cityMap.getOrDefault(city, "010");
+        // 前程无忧标准城市代码（前6位）- 修正重复编码问题
+        cityMap.put("北京", "010000");
+        cityMap.put("上海", "020000");
+        cityMap.put("广州", "030200");
+        cityMap.put("深圳", "030500");
+        cityMap.put("杭州", "080200");
+        cityMap.put("南京", "070200");
+        cityMap.put("成都", "280200");
+        cityMap.put("武汉", "180200");
+        cityMap.put("西安", "270200");
+        cityMap.put("苏州", "080300");    // 修复：原与杭州重复为080200，改为080300
+        cityMap.put("重庆", "060000");
+        cityMap.put("天津", "120000");
+        cityMap.put("长沙", "190200");    // 修复：原与武汉重复为180200，改为190200
+        cityMap.put("郑州", "170200");
+        cityMap.put("东莞", "030600");
+        cityMap.put("合肥", "150200");
+        cityMap.put("青岛", "120200");
+        cityMap.put("沈阳", "100200");
+        cityMap.put("大连", "100300");
+        cityMap.put("厦门", "030400");
+        return cityMap.getOrDefault(standardizeCity(city), "010000");
+    }
+
+    /**
+     * 标准化城市名称：去掉"市"、"县"等后缀，确保匹配一致性
+     */
+    private String standardizeCity(String city) {
+        if (city == null || city.isBlank()) {
+            return city;
+        }
+        // 去掉常见的市、县、区后缀
+        String standardized = city.trim()
+            .replaceAll("(市|县|区|自治州)$", "");
+        return standardized;
+    }
+
+    /**
+     * 验证城市是否在标准城市列表中
+     */
+    private boolean isStandardCity(String city) {
+        if (city == null || city.isBlank()) {
+            return false;
+        }
+        String standardized = standardizeCity(city);
+        List<String> standardCities = Arrays.asList(
+            "北京", "上海", "广州", "深圳", "杭州", "南京", "成都",
+            "武汉", "西安", "苏州", "重庆", "天津", "长沙", "郑州", "东莞"
+        );
+        return standardCities.contains(standardized);
     }
 
     private void randomSleep(int minMs, int maxMs) {
@@ -1020,7 +1055,7 @@ public class CrawlServiceImpl implements CrawlService {
             job.setTitle(titles[ThreadLocalRandom.current().nextInt(titles.length)]);
             job.setCompanyName(companies[ThreadLocalRandom.current().nextInt(companies.length)]);
             job.setSourceSite(SITE_MAP.getOrDefault(site, site));
-            job.setCity(city != null && !city.isBlank() ? city : "长沙");
+            job.setCity(isStandardCity(city) ? standardizeCity(city) : "长沙");
             job.setEducation(educations[ThreadLocalRandom.current().nextInt(educations.length)]);
             job.setExperience(experiences[ThreadLocalRandom.current().nextInt(experiences.length)]);
             
@@ -1094,21 +1129,28 @@ public class CrawlServiceImpl implements CrawlService {
     }
     
     private String generateBackupJobUrl(String site, String title, String company) {
+        // 【方案C增量】备用数据URL改为：城市 + 关键词精准搜索
+        // 原方案：只传 company 参数，搜索结果不精准
+        // 新方案：只传 city（从参数job获取）+ title 作为关键词，跳转到精准搜索结果页
         try {
             String encodedTitle = URLEncoder.encode(title, StandardCharsets.UTF_8);
-            String encodedCompany = URLEncoder.encode(company, StandardCharsets.UTF_8);
-            
+            // city 由调用方通过参数传入（generateBackupJobs 中已处理）
+            // 此处不再使用 company 参数，避免搜索引擎将公司名作为主过滤条件
             switch (site) {
                 case "boss":
-                    return "https://www.zhipin.com/web/geek/job?query=" + encodedTitle + "&company=" + encodedCompany;
+                    // BOSS直聘搜索页：query=岗位关键词，支持城市筛选
+                    return "https://www.zhipin.com/web/geek/job?query=" + encodedTitle;
                 case "zhaopin":
-                    return "https://sou.zhaopin.com/?kw=" + encodedTitle + "&company=" + encodedCompany;
+                    // 智联招聘搜索页：kw=岗位关键词
+                    return "https://sou.zhaopin.com/?jl=&kw=" + encodedTitle;
                 case "51job":
-                    return "https://we.51job.com/pc/search?keyword=" + encodedTitle + "&company=" + encodedCompany;
+                    // 前程无忧搜索页：keyword=岗位关键词
+                    return "https://we.51job.com/pc/search?keyword=" + encodedTitle;
                 case "liepin":
-                    return "https://www.liepin.com/zhaopin/?key=" + encodedTitle + "&company=" + encodedCompany;
+                    // 猎聘搜索页：key=岗位关键词
+                    return "https://www.liepin.com/zhaopin/?key=" + encodedTitle;
                 default:
-                    return "https://www.baidu.com/s?wd=" + encodedTitle + " " + encodedCompany;
+                    return "https://www.baidu.com/s?wd=" + encodedTitle + " " + company;
             }
         } catch (Exception e) {
             return getDefaultSiteUrl(site);
@@ -1173,22 +1215,42 @@ public class CrawlServiceImpl implements CrawlService {
             
             // 地点、经验、学历
             String infoText = card.text();
-            String cityText = firstMatch(infoText, "(北京|上海|广州|深圳|杭州|南京|成都|武汉|西安|苏州|重庆|天津|长沙|郑州|东莞)");
             String edu = firstMatchedOrDefault(infoText, EDUCATION_PATTERN, "不限");
             String exp = firstMatchedOrDefault(infoText, EXPERIENCE_PATTERN, "经验不限");
-            
-            // 发布时间
-            String publish = firstMatch(infoText, "(\\d{1,2}-\\d{1,2}|\\d+小时前|\\d+天前|今天|昨日|\\d+分钟前)");
-            
+
+            // 城市解析策略：优先使用搜索参数城市，确保筛选一致性
+            String resolvedCity = standardizeCity(city);
+            // 如果搜索参数城市为空或非标准城市，尝试从卡片提取
+            if (!isStandardCity(resolvedCity)) {
+                String cardCity = firstMatch(infoText, "(北京|上海|广州|深圳|杭州|南京|成都|武汉|西安|苏州|重庆|天津|长沙|郑州|东莞)");
+                if (cardCity != null && !cardCity.isBlank()) {
+                    resolvedCity = standardizeCity(cardCity);
+                } else {
+                    resolvedCity = "未知";
+                }
+            }
+
             // 过滤无效岗位
             if (isInvalidJob(title, company, infoText)) {
                 continue;
             }
-            
+
+            // 【方案B增量】从卡片<a>标签中提取BOSS直聘详情页真实URL
+            // BOSS详情页URL格式: https://www.zhipin.com/job_detail/xxx.html
+            // 相对路径格式: /job_detail/xxx.html，需要拼装完整URL
+            String rawUrl = "";
+            Element link = card.selectFirst("a[href*=job_detail]");
+            if (link != null) {
+                rawUrl = link.attr("href");
+                if (rawUrl.startsWith("/")) {
+                    rawUrl = "https://www.zhipin.com" + rawUrl;
+                }
+            }
+
             job.setTitle(trimLen(title, 100));
             job.setCompanyName(trimLen(company, 120));
             job.setSourceSite(SITE_MAP.getOrDefault(site, site));
-            job.setCity(city != null && !city.isBlank() ? city : (cityText != null && !cityText.isBlank() ? cityText : "未知"));
+            job.setCity(resolvedCity);
             job.setEducation(edu);
             job.setExperience(exp);
             job.setMinSalary(salary[0]);
@@ -1196,6 +1258,9 @@ public class CrawlServiceImpl implements CrawlService {
             job.setSalaryUnit("monthly");
             job.setSkills(extractSkills(infoText));
             job.setJobDesc(trimLen(infoText, 1500));
+            // 【方案B】保存从页面真实提取的BOSS直聘详情页URL，供前端直接跳转
+            String publish = firstMatch(infoText, "(\\d{1,2}-\\d{1,2}|\\d+小时前|\\d+天前|今天|昨日|\\d+个工作日)");
+            job.setUrl(rawUrl);
             job.setPublishTime(parsePublishTime(publish));
             job.setLastSeenAt(LocalDateTime.now());
             job.setJobKey(buildJobKey(site, job.getTitle(), job.getCompanyName(), job.getCity()));
@@ -1236,22 +1301,45 @@ public class CrawlServiceImpl implements CrawlService {
             
             // 地点、经验、学历
             String infoText = card.text();
-            String cityText = firstMatch(infoText, "(北京|上海|广州|深圳|杭州|南京|成都|武汉|西安|苏州|重庆|天津|长沙|郑州|东莞)");
             String edu = firstMatchedOrDefault(infoText, EDUCATION_PATTERN, "不限");
             String exp = firstMatchedOrDefault(infoText, EXPERIENCE_PATTERN, "经验不限");
-            
+
+            // 城市解析策略：优先使用搜索参数城市，确保筛选一致性
+            String resolvedCity = standardizeCity(city);
+            // 如果搜索参数城市为空或非标准城市，尝试从卡片提取
+            if (!isStandardCity(resolvedCity)) {
+                String cardCity = firstMatch(infoText, "(北京|上海|广州|深圳|杭州|南京|成都|武汉|西安|苏州|重庆|天津|长沙|郑州|东莞)");
+                if (cardCity != null && !cardCity.isBlank()) {
+                    resolvedCity = standardizeCity(cardCity);
+                } else {
+                    resolvedCity = "未知";
+                }
+            }
+
             // 发布时间
             String publish = firstMatch(infoText, "(\\d{1,2}-\\d{1,2}|\\d+小时前|\\d+天前|今天|昨日|\\d+分钟前)");
-            
+
             // 过滤无效岗位
             if (isInvalidJob(title, company, infoText)) {
                 continue;
             }
-            
+
+            // 【方案B增量】从卡片<a>标签中提取智联招聘详情页真实URL
+            // 智联详情页URL格式: https://jobs.zhaopin.com/xxx.htm 或 /jobs/detail/xxx
+            // 选择器优先匹配包含jobs/detail或jobs.zhaopin.com的链接
+            String rawUrl = "";
+            Element link = card.selectFirst("a[href*=jobs], a[href*=zhaopin]");
+            if (link != null) {
+                rawUrl = link.attr("href");
+                if (rawUrl.startsWith("/")) {
+                    rawUrl = "https://jobs.zhaopin.com" + rawUrl;
+                }
+            }
+
             job.setTitle(trimLen(title, 100));
             job.setCompanyName(trimLen(company, 120));
             job.setSourceSite(SITE_MAP.getOrDefault(site, site));
-            job.setCity(city != null && !city.isBlank() ? city : (cityText != null && !cityText.isBlank() ? cityText : "未知"));
+            job.setCity(resolvedCity);
             job.setEducation(edu);
             job.setExperience(exp);
             job.setMinSalary(salary[0]);
@@ -1259,6 +1347,8 @@ public class CrawlServiceImpl implements CrawlService {
             job.setSalaryUnit("monthly");
             job.setSkills(extractSkills(infoText));
             job.setJobDesc(trimLen(infoText, 1500));
+            // 【方案B】保存从页面真实提取的智联招聘详情页URL，供前端直接跳转
+            job.setUrl(rawUrl);
             job.setPublishTime(parsePublishTime(publish));
             job.setLastSeenAt(LocalDateTime.now());
             job.setJobKey(buildJobKey(site, job.getTitle(), job.getCompanyName(), job.getCity()));
@@ -1299,22 +1389,33 @@ public class CrawlServiceImpl implements CrawlService {
             
             // 地点、经验、学历
             String infoText = card.text();
-            String cityText = firstMatch(infoText, "(北京|上海|广州|深圳|杭州|南京|成都|武汉|西安|苏州|重庆|天津|长沙|郑州|东莞)");
             String edu = firstMatchedOrDefault(infoText, EDUCATION_PATTERN, "不限");
             String exp = firstMatchedOrDefault(infoText, EXPERIENCE_PATTERN, "经验不限");
-            
+
+            // 城市解析策略：优先使用搜索参数城市，确保筛选一致性
+            String resolvedCity = standardizeCity(city);
+            // 如果搜索参数城市为空或非标准城市，尝试从卡片提取
+            if (!isStandardCity(resolvedCity)) {
+                String cardCity = firstMatch(infoText, "(北京|上海|广州|深圳|杭州|南京|成都|武汉|西安|苏州|重庆|天津|长沙|郑州|东莞)");
+                if (cardCity != null && !cardCity.isBlank()) {
+                    resolvedCity = standardizeCity(cardCity);
+                } else {
+                    resolvedCity = "未知";
+                }
+            }
+
             // 发布时间
             String publish = firstMatch(infoText, "(\\d{1,2}-\\d{1,2}|\\d+小时前|\\d+天前|今天|昨日|\\d+分钟前)");
-            
+
             // 过滤无效岗位
             if (isInvalidJob(title, company, infoText)) {
                 continue;
             }
-            
+
             job.setTitle(trimLen(title, 100));
             job.setCompanyName(trimLen(company, 120));
             job.setSourceSite(SITE_MAP.getOrDefault(site, site));
-            job.setCity(city != null && !city.isBlank() ? city : (cityText != null && !cityText.isBlank() ? cityText : "未知"));
+            job.setCity(resolvedCity);
             job.setEducation(edu);
             job.setExperience(exp);
             job.setMinSalary(salary[0]);
@@ -1360,22 +1461,33 @@ public class CrawlServiceImpl implements CrawlService {
             
             // 地点、经验、学历
             String infoText = card.text();
-            String cityText = firstMatch(infoText, "(北京|上海|广州|深圳|杭州|南京|成都|武汉|西安|苏州|重庆|天津|长沙|郑州|东莞)");
             String edu = firstMatchedOrDefault(infoText, EDUCATION_PATTERN, "不限");
             String exp = firstMatchedOrDefault(infoText, EXPERIENCE_PATTERN, "经验不限");
-            
+
+            // 城市解析策略：优先使用搜索参数城市，确保筛选一致性
+            String resolvedCity = standardizeCity(city);
+            // 如果搜索参数城市为空或非标准城市，尝试从卡片提取
+            if (!isStandardCity(resolvedCity)) {
+                String cardCity = firstMatch(infoText, "(北京|上海|广州|深圳|杭州|南京|成都|武汉|西安|苏州|重庆|天津|长沙|郑州|东莞)");
+                if (cardCity != null && !cardCity.isBlank()) {
+                    resolvedCity = standardizeCity(cardCity);
+                } else {
+                    resolvedCity = "未知";
+                }
+            }
+
             // 发布时间
             String publish = firstMatch(infoText, "(\\d{1,2}-\\d{1,2}|\\d+小时前|\\d+天前|今天|昨日)");
-            
+
             // 过滤无效岗位
             if (isInvalidJob(title, company, infoText)) {
                 continue;
             }
-            
+
             job.setTitle(trimLen(title, 100));
             job.setCompanyName(trimLen(company, 120));
             job.setSourceSite(SITE_MAP.getOrDefault(site, site));
-            job.setCity(city != null && !city.isBlank() ? city : (cityText != null && !cityText.isBlank() ? cityText : "未知"));
+            job.setCity(resolvedCity);
             job.setEducation(edu);
             job.setExperience(exp);
             job.setMinSalary(salary[0]);
@@ -1398,7 +1510,7 @@ public class CrawlServiceImpl implements CrawlService {
         return freshGradJobs.stream().limit(30).collect(Collectors.toList());
     }
     
-    // 通用解析（备用）
+    // 通用解析（其他平台）
     private List<Job> parseGeneral(Document doc, String site, String city) {
         List<Job> jobs = new ArrayList<>();
         Elements cards = doc.select("div,li,article,.job-card,.job-item,.job-info");

@@ -12,6 +12,11 @@
         <result column="role" property="role"/>
         <result column="email" property="email"/>
         <result column="created_at" property="createdAt"/>
+        <result column="login_fail_count" property="loginFailCount"/>
+        <result column="locked_until" property="lockedUntil"/>
+        <result column="skills" property="skills"/>
+        <result column="education" property="education"/>
+        <result column="experience_years" property="experienceYears"/>
     </resultMap>
 
     <select id="findByUsername" parameterType="string" resultMap="UserResultMap">
@@ -23,8 +28,8 @@
     </select>
 
     <insert id="insert" parameterType="com.example.recruitment.entity.User" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO user (username, password, salt, role, email, created_at)
-        VALUES (#{username}, #{password}, #{salt}, #{role}, #{email}, #{createdAt})
+        INSERT INTO user (username, password, salt, role, email, created_at, login_fail_count)
+        VALUES (#{username}, #{password}, #{salt}, #{role}, #{email}, #{createdAt}, #{loginFailCount})
     </insert>
 
     <update id="update" parameterType="com.example.recruitment.entity.User">
@@ -33,8 +38,32 @@
             <if test="password != null">password = #{password},</if>
             <if test="salt != null">salt = #{salt},</if>
             <if test="email != null">email = #{email},</if>
+            <if test="loginFailCount != null">login_fail_count = #{loginFailCount},</if>
+            <if test="lockedUntil != null">locked_until = #{lockedUntil},</if>
+            <if test="lockedUntil == null">locked_until = NULL,</if>
+            <if test="role != null">role = #{role},</if>
+            <if test="skills != null">skills = #{skills},</if>
+            <if test="education != null">education = #{education},</if>
+            <if test="experienceYears != null">experience_years = #{experienceYears},</if>
         </set>
         WHERE id = #{id}
     </update>
+    
+    <select id="listUsers" resultMap="UserResultMap">
+        SELECT * FROM user
+        <where>
+            <if test="username != null and username != ''">AND username LIKE CONCAT('%', #{username}, '%')</if>
+        </where>
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+    
+    <select id="countUsers" resultType="long">
+        SELECT COUNT(*) FROM user
+    </select>
+    
+    <delete id="deleteById" parameterType="long">
+        DELETE FROM user WHERE id = #{id}
+    </delete>
 </mapper>
 

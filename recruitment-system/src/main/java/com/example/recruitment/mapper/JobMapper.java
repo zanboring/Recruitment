@@ -19,6 +19,8 @@ public interface JobMapper {
 
     int deleteById(Long id);
 
+    int batchDelete(@Param("ids") List<Long> ids);
+
     int deleteAll();
 
     Job selectById(Long id);
@@ -65,5 +67,9 @@ public interface JobMapper {
     List<Job> selectAll();
 
     List<Job> selectRecentJobs(@Param("days") int days);
+
+    int countAll();
+
+    int updateById(Job job);
 }
 

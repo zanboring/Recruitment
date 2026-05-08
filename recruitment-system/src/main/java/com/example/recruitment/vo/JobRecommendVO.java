@@ -15,6 +15,9 @@ public class JobRecommendVO {
     private String education;
     private String experience;
     
+    private String url;
+    private String sourceSite;
+    
     private BigDecimal overallScore;
     private BigDecimal skillMatchScore;
     private BigDecimal educationMatchScore;

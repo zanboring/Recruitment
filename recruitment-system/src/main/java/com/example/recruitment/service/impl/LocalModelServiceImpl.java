@@ -41,6 +41,9 @@ public class LocalModelServiceImpl implements LocalModelService {
     private static final int MAX_CITY_DISTRIBUTION = 5;
     private static final int MAX_CITY_HOT_JOBS = 3;
 
+    // 线程安全的随机数生成器
+    private static final Random RANDOM = new Random();
+
     private final JobMapper jobMapper;
 
     static {
@@ -495,7 +498,7 @@ public class LocalModelServiceImpl implements LocalModelService {
         if (responses == null || responses.isEmpty()) {
             return "抱歉，我暂时无法回答这个问题。";
         }
-        return responses.get(new Random().nextInt(responses.size()));
+        return responses.get(RANDOM.nextInt(responses.size()));
     }
 
     /**

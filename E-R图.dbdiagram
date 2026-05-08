@@ -1,0 +1,100 @@
+Table user {
+  id bigint [pk, increment]
+  username varchar(50) [not null, unique]
+  password varchar(255) [not null]
+  role varchar(20) [default: 'USER']
+  email varchar(100)
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+}
+
+Table company {
+  id bigint [pk, increment]
+  name varchar(100) [not null]
+  industry varchar(100)
+  city varchar(50)
+  scale varchar(50)
+  website varchar(255)
+  created_at datetime [not null]
+}
+
+Table job {
+  id bigint [pk, increment]
+  company_id bigint
+  title varchar(100) [not null]
+  company_name varchar(120)
+  city varchar(50)
+  experience varchar(50)
+  education varchar(50)
+  min_salary decimal(10,2)
+  max_salary decimal(10,2)
+  skills varchar(500)
+  description text
+}
+
+Table resume {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  name varchar(50)
+  phone varchar(20)
+  email varchar(100)
+  education varchar(50)
+  experience_years int
+  skills varchar(500)
+  summary text
+}
+
+Table job_application {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  job_id bigint [not null]
+  resume_id bigint
+  status varchar(20) [default: 'PENDING']
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+}
+
+Table job_favorite {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  job_id bigint [not null]
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+}
+
+Table crawl_task {
+  id bigint [pk, increment]
+  source_website varchar(100)
+  keyword varchar(100)
+  target_city varchar(50)
+  status varchar(20) [default: 'PENDING']
+  collected_count int [default: 0]
+  remark varchar(255)
+  created_at datetime [not null]
+  completed_at datetime
+}
+
+Table system_log {
+  id bigint [pk, increment]
+  username varchar(50)
+  operation varchar(100)
+  request_method varchar(100)
+  request_url varchar(200)
+  client_ip varchar(50)
+  success tinyint(1) [default: 1]
+  created_at datetime [not null]
+}
+
+Table search_history {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  keyword varchar(200)
+  city varchar(50)
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+}
+
+Ref: user.id < resume.user_id
+Ref: user.id < job_application.user_id
+Ref: user.id < job_favorite.user_id
+Ref: user.id < search_history.user_id
+Ref: company.id < job.company_id
+Ref: job.id < job_application.job_id
+Ref: job.id < job_favorite.job_id
+Ref: resume.id < job_application.resume_id
