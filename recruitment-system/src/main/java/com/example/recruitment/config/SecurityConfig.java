@@ -60,10 +60,11 @@ public class SecurityConfig {
             .requestMatchers("/api/auth/default-username").permitAll()
             // [安全优化] 注释掉 default-credentials 接口的放行，避免密码泄露
             // .requestMatchers("/api/auth/default-credentials").permitAll()
-            .requestMatchers("/api/model/status", "/api/model/health").permitAll();
-            // [安全优化] AI 和知识库接口需要认证，不再完全开放
-            // .requestMatchers("/api/ai/**").permitAll()
-            // .requestMatchers("/api/knowledge/**").permitAll();
+            .requestMatchers("/api/model/status", "/api/model/health").permitAll()
+            // AI状态接口需要公开访问，用于前端展示模型状态
+            .requestMatchers("/api/ai/status").permitAll()
+            // 知识库接口放行
+            .requestMatchers("/api/knowledge/**").permitAll();
         
         if (!"prod".equals(activeProfile)) {
             auth.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll();
@@ -88,7 +89,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList(allowedOrigins.split(",")));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

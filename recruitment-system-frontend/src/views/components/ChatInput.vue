@@ -37,15 +37,24 @@
     </div>
     <div class="input-actions">
       <el-button
+        v-if="!loading"
         type="primary"
-        :loading="loading"
         @click="handleSend"
-        :disabled="!inputMessage.trim() || loading"
+        :disabled="!inputMessage.trim()"
         class="send-button"
-        :class="{ 'send-button-active': inputMessage.trim() && !loading }"
+        :class="{ 'send-button-active': inputMessage.trim() }"
       >
         <el-icon class="send-icon"><ArrowRight /></el-icon>
         发送
+      </el-button>
+      <el-button
+        v-else
+        type="danger"
+        @click="handleStop"
+        class="stop-button"
+      >
+        <el-icon class="stop-icon"><VideoPause /></el-icon>
+        停止
       </el-button>
       <el-button 
         @click="clearMessages"
@@ -60,7 +69,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { ArrowRight, Delete } from '@element-plus/icons-vue';
+import { ArrowRight, Delete, VideoPause } from '@element-plus/icons-vue';
 
 // Props
 const props = defineProps<{
@@ -71,6 +80,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'send', message: string): void;
   (e: 'clear'): void;
+  (e: 'stop'): void;
 }>();
 
 // 双向绑定
@@ -80,8 +90,12 @@ const inputMessage = defineModel<string>('inputMessage', { default: '' });
 const inputFocused = ref(false);
 
 const handleSend = () => {
-  if (!inputMessage.value.trim() || props.loading) return;
+  if (!inputMessage.value.trim()) return;
   emit('send', inputMessage.value.trim());
+};
+
+const handleStop = () => {
+  emit('stop');
 };
 
 const clearMessages = () => {
@@ -238,6 +252,33 @@ const clearMessages = () => {
 }
 
 .clear-icon {
+  font-size: 16px;
+}
+
+.stop-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-weight: 500;
+  transition: all 0.3s;
+  background: #f56c6c;
+  border: none;
+  box-shadow: 0 2px 4px rgba(245, 108, 108, 0.2);
+}
+
+.stop-button:hover {
+  background: #f78989;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.3);
+}
+
+.stop-button:active {
+  transform: translateY(0);
+}
+
+.stop-icon {
   font-size: 16px;
 }
 </style>

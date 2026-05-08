@@ -51,6 +51,30 @@ const routes: RouteRecordRaw[] = [
         path: 'ai',
         name: 'AIChat',
         component: () => import('@/views/AIChat.vue')
+      },
+      {
+        path: 'admin/users',
+        name: 'UserManagement',
+        component: () => import('@/views/admin/UserManagement.vue'),
+        meta: { requiresAdmin: true }
+      },
+      {
+        path: 'admin/logs',
+        name: 'LogAudit',
+        component: () => import('@/views/admin/LogAudit.vue'),
+        meta: { requiresAdmin: true }
+      },
+      {
+        path: 'admin/knowledge',
+        name: 'KnowledgeBase',
+        component: () => import('@/views/admin/KnowledgeBase.vue'),
+        meta: { requiresAdmin: true }
+      },
+      {
+        path: 'admin/models',
+        name: 'ModelManager',
+        component: () => import('@/views/admin/ModelManager.vue'),
+        meta: { requiresAdmin: true }
       }
     ]
   },
@@ -73,32 +97,36 @@ router.beforeEach(async (to, from, next) => {
   // Ensure token is loaded before auth guard runs (refresh/back-button scenario)
   userStore.loadFromStorage();
 
-  // 已登录或正在访问登录页：直接放行
-  if (userStore.isLogin || to.path === '/login') {
-    next();
+  // 未登录且访问非登录页：尝试自动登录或跳转登录
+  if (!userStore.isLogin && to.path !== '/login') {
+    if (!autoLoginPromise) {
+      autoLoginPromise = (async () => {
+        const user = await autoLoginApi();
+        userStore.setUser(user);
+      })();
+    }
+
+    try {
+      await autoLoginPromise;
+      if (!userStore.isLogin) {
+        next('/login');
+        return;
+      }
+    } catch (_) {
+      autoLoginPromise = null;
+      next('/login');
+      return;
+    }
+  }
+
+  // 检查管理员权限
+  if (to.meta?.requiresAdmin && userStore.role !== 'ADMIN') {
+    // 非管理员访问管理员页面，跳转到首页
+    next('/');
     return;
   }
 
-  // 未登录但需要访问其它页面：尝试自动登录
-  if (!autoLoginPromise) {
-    autoLoginPromise = (async () => {
-      const user = await autoLoginApi();
-      userStore.setUser(user);
-    })();
-  }
-
-  try {
-    await autoLoginPromise;
-    if (userStore.isLogin) {
-      next();
-    } else {
-      next('/login');
-    }
-  } catch (_) {
-    autoLoginPromise = null;
-    // [安全优化] 移除 prefillLoginCredentials，不再自动填充密码
-    next('/login');
-  }
+  next();
 });
 
 export default router;

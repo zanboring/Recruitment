@@ -114,6 +114,13 @@ public class AIService {
      * 这样避免前端每个token都换行显示的问题
      */
     public void chatStream(String systemPrompt, String userMessage, SseEmitter emitter) throws Exception {
+        chatStream(systemPrompt, userMessage, emitter, null);
+    }
+    
+    /**
+     * 流式调用智谱AI（SSE）- 带响应收集
+     */
+    public void chatStream(String systemPrompt, String userMessage, SseEmitter emitter, StringBuilder fullResponse) throws Exception {
         if (!isApiKeyConfigured()) {
             throw new IllegalStateException("未配置智谱AI API Key，请设置环境变量 ZHIPUAI_API_KEY");
         }
@@ -147,6 +154,9 @@ public class AIService {
                             String toSend = currentLine.toString().trim();
                             if (!toSend.isEmpty()) {
                                 emitter.send(SseEmitter.event().name("message").data(toSend));
+                                if (fullResponse != null) {
+                                    fullResponse.append(toSend);
+                                }
                             }
                         }
                         break;
@@ -154,6 +164,9 @@ public class AIService {
                     String content = extractStreamContent(data);
                     if (content != null && !content.isEmpty()) {
                         currentLine.append(content);
+                        if (fullResponse != null) {
+                            fullResponse.append(content);
+                        }
 
                         if (currentLine.length() >= MAX_LINE_BUFFER) {
                             String toSend = currentLine.toString();

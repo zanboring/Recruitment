@@ -1,5 +1,6 @@
 package com.example.recruitment.controller;
 
+import com.example.recruitment.annotation.Log;
 import com.example.recruitment.common.Result;
 import com.example.recruitment.service.DataService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +33,7 @@ public class DataController {
     @PostMapping("/import")
     @Operation(summary = "导入数据", description = "从Excel文件导入招聘数据（需管理员权限）")
     @PreAuthorize("hasAuthority('data:import') or hasRole('ADMIN')")
+    @Log("导入招聘数据")
     public Result<Void> importJobs(@RequestPart("file") MultipartFile file) {
         log.info("导入数据请求: fileName={}, size={}", file.getOriginalFilename(), file.getSize());
         dataService.importJobs(file);
@@ -51,6 +53,7 @@ public class DataController {
     @PostMapping("/cleanup")
     @Operation(summary = "清洗数据库", description = "清空岗位数据与爬虫任务数据（需管理员权限）")
     @PreAuthorize("hasAuthority('data:cleanup') or hasRole('ADMIN')")
+    @Log("清洗数据库")
     public Result<Integer> cleanupAllData(HttpServletRequest request) {
         // 通过 Spring Security Context 获取当前认证用户ID（由 JwtAuthFilter 设置）
         Long userId = getCurrentUserId(request);

@@ -71,6 +71,28 @@
             <span class="menu-text">AI智能分析</span>
           </template>
         </el-menu-item>
+        <el-sub-menu v-if="isAdmin" index="admin">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span class="menu-text">系统管理</span>
+          </template>
+          <el-menu-item index="/admin/users">
+            <el-icon><User /></el-icon>
+            <template #title>用户管理</template>
+          </el-menu-item>
+          <el-menu-item index="/admin/logs">
+            <el-icon><Files /></el-icon>
+            <template #title>操作日志</template>
+          </el-menu-item>
+          <el-menu-item index="/admin/knowledge">
+            <el-icon><Notebook /></el-icon>
+            <template #title>知识库管理</template>
+          </el-menu-item>
+          <el-menu-item index="/admin/models">
+            <el-icon><Cpu /></el-icon>
+            <template #title>模型管理</template>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
 
       <div class="sidebar-footer">
@@ -164,7 +186,10 @@ import {
   ArrowDown,
   User,
   ChatDotRound,
-  Loading
+  Loading,
+  Files,
+  Notebook,
+  Cpu
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
@@ -177,6 +202,7 @@ const currentTime = ref('');
 
 const active = computed(() => route.path);
 const username = computed(() => userStore.user?.username || '');
+const isAdmin = computed(() => userStore.role === 'ADMIN');
 
 const currentRoute = computed(() => {
   const routeNames: Record<string, string> = {
@@ -187,7 +213,11 @@ const currentRoute = computed(() => {
     '/analysis': '数据分析',
     '/data': '数据管理',
     '/settings': '系统设置',
-    '/ai': 'AI智能分析'
+    '/ai': 'AI智能分析',
+    '/admin/users': '用户管理',
+    '/admin/logs': '操作日志',
+    '/admin/knowledge': '知识库管理',
+    '/admin/models': '模型管理'
   };
   return routeNames[route.path] || '';
 });

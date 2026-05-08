@@ -19,10 +19,17 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * 岗位服务实现
+ * 优化要点：
+ * 1. 抽取公共配置常量到静态内部类
+ * 2. 重构薪资预测逻辑，提取独立方法
+ * 3. 优化岗位推荐算法，提高匹配精度
+ * 4. 简化AI分析报告生成流程
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -31,66 +38,91 @@ public class JobServiceImpl implements JobService {
     private final JobMapper jobMapper;
     private final AIService aiService;
 
-    // 热门技能权重配置（扩展版 - 与爬虫技能词库对齐）
-    private static final Map<String, Integer> SKILL_WEIGHTS = new HashMap<>();
-    static {
-        // AI/算法类（最高权重）
-        SKILL_WEIGHTS.put("人工智能", 12);
-        SKILL_WEIGHTS.put("AI", 12);
-        SKILL_WEIGHTS.put("算法", 11);
-        SKILL_WEIGHTS.put("机器学习", 11);
-        SKILL_WEIGHTS.put("深度学习", 11);
-        SKILL_WEIGHTS.put("LLM", 11);
-        SKILL_WEIGHTS.put("大模型", 11);
-        // 后端核心
-        SKILL_WEIGHTS.put("Java", 10);
-        SKILL_WEIGHTS.put("Python", 10);
-        SKILL_WEIGHTS.put("Go", 9);
-        SKILL_WEIGHTS.put("Golang", 9);
-        SKILL_WEIGHTS.put("大数据", 9);
-        SKILL_WEIGHTS.put("SpringBoot", 9);
-        SKILL_WEIGHTS.put("SpringCloud", 9);
-        SKILL_WEIGHTS.put("Kubernetes", 9);
-        SKILL_WEIGHTS.put("K8s", 9);
-        SKILL_WEIGHTS.put("DevOps", 9);
-        // 前端
-        SKILL_WEIGHTS.put("前端", 8);
-        SKILL_WEIGHTS.put("Vue3", 8);
-        SKILL_WEIGHTS.put("Vue", 8);
-        SKILL_WEIGHTS.put("React", 8);
-        SKILL_WEIGHTS.put("TypeScript", 8);
-        SKILL_WEIGHTS.put("Node.js", 8);
-        SKILL_WEIGHTS.put("Spring", 8);
-        SKILL_WEIGHTS.put("微服务", 8);
-        // 数据/数据库
-        SKILL_WEIGHTS.put("MySQL", 7);
-        SKILL_WEIGHTS.put("Redis", 7);
-        SKILL_WEIGHTS.put("MongoDB", 7);
-        SKILL_WEIGHTS.put("Elasticsearch", 7);
-        SKILL_WEIGHTS.put("Kafka", 7);
-        SKILL_WEIGHTS.put("Spark", 7);
-        SKILL_WEIGHTS.put("Flink", 7);
-        SKILL_WEIGHTS.put("Hadoop", 7);
-        // 基础设施
-        SKILL_WEIGHTS.put("Linux", 7);
-        SKILL_WEIGHTS.put("Docker", 7);
-        SKILL_WEIGHTS.put("CI/CD", 7);
-        // 测试
-        SKILL_WEIGHTS.put("测试", 6);
-        SKILL_WEIGHTS.put("自动化测试", 6);
-        SKILL_WEIGHTS.put("运维", 6);
-        SKILL_WEIGHTS.put("C++", 7);
-        SKILL_WEIGHTS.put("PHP", 5);
-        SKILL_WEIGHTS.put(".NET", 5);
-        SKILL_WEIGHTS.put("Rust", 8);
-        SKILL_WEIGHTS.put("TensorFlow", 10);
-        SKILL_WEIGHTS.put("PyTorch", 10);
-        SKILL_WEIGHTS.put("数据分析", 9);
+    /**
+     * 薪资因子配置（城市、经验、学历）
+     */
+    private static final class SalaryFactors {
+        // 城市薪资系数（以二线城市为基准1.0）
+        static final Map<String, Double> CITY = Map.ofEntries(
+            Map.entry("北京", 1.8), Map.entry("上海", 1.75), Map.entry("深圳", 1.65), Map.entry("杭州", 1.45),
+            Map.entry("广州", 1.35), Map.entry("南京", 1.25), Map.entry("成都", 1.15), Map.entry("武汉", 1.12),
+            Map.entry("苏州", 1.30), Map.entry("重庆", 1.10), Map.entry("西安", 1.08), Map.entry("天津", 1.18),
+            Map.entry("长沙", 1.05), Map.entry("郑州", 1.02), Map.entry("东莞", 1.28)
+        );
+
+        // 经验薪资系数
+        static final Map<String, Double> EXPERIENCE = Map.of(
+            "应届", 0.70, "经验不限", 0.85, "1-3年", 0.90,
+            "3-5年", 1.20, "5-10年", 1.50, "10年以上", 1.80
+        );
+
+        // 学历薪资系数
+        static final Map<String, Double> EDUCATION = Map.of(
+            "大专", 0.80, "本科", 1.00, "硕士", 1.35,
+            "博士", 1.70, "不限", 0.95
+        );
+
+        // 高薪技能列表
+        static final Set<String> PREMIUM_SKILLS = Set.of(
+            "算法", "大数据", "人工智能", "机器学习", "深度学习", "Go", "架构师"
+        );
+
+        // 权重配置
+        static final double CITY_WEIGHT = 0.4;
+        static final double EXP_WEIGHT = 0.35;
+        static final double EDU_WEIGHT = 0.25;
+        static final double PREMIUM_SKILL_BONUS = 0.05;
+        static final double MAX_PREMIUM_BONUS = 0.15;
     }
+
+    /**
+     * 技能权重配置
+     */
+    private static final Map<String, Integer> SKILL_WEIGHTS = Map.ofEntries(
+        Map.entry("人工智能", 12), Map.entry("AI", 12), Map.entry("算法", 11),
+        Map.entry("机器学习", 11), Map.entry("深度学习", 11), Map.entry("LLM", 11),
+        Map.entry("大模型", 11), Map.entry("Java", 10), Map.entry("Python", 10),
+        Map.entry("Go", 9), Map.entry("Golang", 9), Map.entry("大数据", 9),
+        Map.entry("SpringBoot", 9), Map.entry("SpringCloud", 9), Map.entry("Kubernetes", 9),
+        Map.entry("K8s", 9), Map.entry("DevOps", 9), Map.entry("前端", 8),
+        Map.entry("Vue3", 8), Map.entry("Vue", 8), Map.entry("React", 8),
+        Map.entry("TypeScript", 8), Map.entry("Node.js", 8), Map.entry("Spring", 8),
+        Map.entry("微服务", 8), Map.entry("MySQL", 7), Map.entry("Redis", 7),
+        Map.entry("MongoDB", 7), Map.entry("Elasticsearch", 7), Map.entry("Kafka", 7),
+        Map.entry("Spark", 7), Map.entry("Flink", 7), Map.entry("Hadoop", 7),
+        Map.entry("Linux", 7), Map.entry("Docker", 7), Map.entry("CI/CD", 7),
+        Map.entry("测试", 6), Map.entry("自动化测试", 6), Map.entry("运维", 6),
+        Map.entry("C++", 7), Map.entry("PHP", 5), Map.entry(".NET", 5),
+        Map.entry("Rust", 8), Map.entry("TensorFlow", 10), Map.entry("PyTorch", 10),
+        Map.entry("数据分析", 9)
+    );
+
+    /**
+     * 学历等级映射
+     */
+    private static final Map<String, Integer> EDUCATION_LEVEL = Map.of(
+        "初中及以下", 1, "高中", 2, "中专", 3, "大专", 4,
+        "本科", 5, "硕士", 6, "博士", 7, "不限", 0
+    );
+
+    /**
+     * 经验年限映射
+     */
+    private static final Map<String, Integer> EXPERIENCE_YEARS = Map.of(
+        "应届", 0, "经验不限", 0, "1年以下", 0, "1-3年", 2,
+        "3-5年", 4, "5-10年", 7, "10年以上", 10, "不限", 0
+    );
+
+    /**
+     * 推荐算法权重配置
+     */
+    private static final double SKILL_WEIGHT = 0.7;
+    private static final double EDUCATION_WEIGHT = 0.2;
+    private static final double EXPERIENCE_WEIGHT = 0.1;
 
     @Override
     public void addJob(Job job) {
-        job.setCreatedAt(LocalDateTime.now());
+        job.setCreatedAt(java.time.LocalDateTime.now());
         jobMapper.insert(job);
     }
 
@@ -108,6 +140,11 @@ public class JobServiceImpl implements JobService {
     }
 
     @Override
+    public int batchDeleteJobs(List<Long> ids) {
+        return (ids == null || ids.isEmpty()) ? 0 : jobMapper.batchDelete(ids);
+    }
+
+    @Override
     public Job getJob(Long id) {
         return jobMapper.selectById(id);
     }
@@ -115,170 +152,92 @@ public class JobServiceImpl implements JobService {
     @Override
     public PageInfo<Job> listJobs(JobQueryDTO dto) {
         PageHelper.startPage(dto.getPageNum(), dto.getPageSize());
-        List<Job> list = jobMapper.selectByCondition(dto);
-        return new PageInfo<>(list);
+        return new PageInfo<>(jobMapper.selectByCondition(dto));
     }
 
     @Override
-    public List<JobStatVO> statByCity() {
-        return jobMapper.statByCity();
-    }
-
+    public List<JobStatVO> statByCity() { return jobMapper.statByCity(); }
     @Override
-    public List<JobStatVO> statByCompany() {
-        return jobMapper.statByCompany();
-    }
-
+    public List<JobStatVO> statByCompany() { return jobMapper.statByCompany(); }
     @Override
-    public List<JobStatVO> statBySkill() {
-        return jobMapper.statBySkill();
-    }
-
+    public List<JobStatVO> statBySkill() { return jobMapper.statBySkill(); }
     @Override
-    public List<JobStatVO> statBySalaryRange() {
-        return jobMapper.statBySalaryRange();
-    }
-
+    public List<JobStatVO> statBySalaryRange() { return jobMapper.statBySalaryRange(); }
     @Override
-    public List<JobStatVO> statByEducation() {
-        return jobMapper.statByEducation();
-    }
-
+    public List<JobStatVO> statByEducation() { return jobMapper.statByEducation(); }
     @Override
-    public List<JobStatVO> statByExperience() {
-        return jobMapper.statByExperience();
-    }
-
+    public List<JobStatVO> statByExperience() { return jobMapper.statByExperience(); }
     @Override
-    public List<JobStatVO> statByStatus() {
-        return jobMapper.statByStatus();
-    }
-
+    public List<JobStatVO> statByStatus() { return jobMapper.statByStatus(); }
     @Override
-    public List<JobStatVO> statTopTitles() {
-        return jobMapper.statTopTitles();
-    }
-
+    public List<JobStatVO> statTopTitles() { return jobMapper.statTopTitles(); }
     @Override
-    public JobTrendVO jobTrendLast7Days() {
-        return jobMapper.jobTrendLast7Days();
-    }
+    public JobTrendVO jobTrendLast7Days() { return jobMapper.jobTrendLast7Days(); }
 
-    // 薪资预测 - 城市系数（以二线城市为基准1.0）
-    private static final Map<String, Double> CITY_SALARY_FACTOR = new HashMap<>();
-    static {
-        CITY_SALARY_FACTOR.put("北京", 1.8);
-        CITY_SALARY_FACTOR.put("上海", 1.75);
-        CITY_SALARY_FACTOR.put("深圳", 1.65);
-        CITY_SALARY_FACTOR.put("杭州", 1.45);
-        CITY_SALARY_FACTOR.put("广州", 1.35);
-        CITY_SALARY_FACTOR.put("南京", 1.25);
-        CITY_SALARY_FACTOR.put("成都", 1.15);
-        CITY_SALARY_FACTOR.put("武汉", 1.12);
-        CITY_SALARY_FACTOR.put("苏州", 1.30);
-        CITY_SALARY_FACTOR.put("重庆", 1.10);
-        CITY_SALARY_FACTOR.put("西安", 1.08);
-        CITY_SALARY_FACTOR.put("天津", 1.18);
-        CITY_SALARY_FACTOR.put("长沙", 1.05);
-        CITY_SALARY_FACTOR.put("郑州", 1.02);
-        CITY_SALARY_FACTOR.put("东莞", 1.28);
-    }
-
-    // 经验系数
-    private static final Map<String, Double> EXP_SALARY_FACTOR = new HashMap<>();
-    static {
-        EXP_SALARY_FACTOR.put("应届", 0.70);
-        EXP_SALARY_FACTOR.put("经验不限", 0.85);
-        EXP_SALARY_FACTOR.put("1-3年", 0.90);
-        EXP_SALARY_FACTOR.put("3-5年", 1.20);
-        EXP_SALARY_FACTOR.put("5-10年", 1.50);
-        EXP_SALARY_FACTOR.put("10年以上", 1.80);
-    }
-
-    // 学历系数
-    private static final Map<String, Double> EDU_SALARY_FACTOR = new HashMap<>();
-    static {
-        EDU_SALARY_FACTOR.put("大专", 0.80);
-        EDU_SALARY_FACTOR.put("本科", 1.00);
-        EDU_SALARY_FACTOR.put("硕士", 1.35);
-        EDU_SALARY_FACTOR.put("博士", 1.70);
-        EDU_SALARY_FACTOR.put("不限", 0.95); // 不限学历通常意味着入门岗位，薪资略低于明确要求本科的
-    }
-
+    /**
+     * 薪资预测（优化版）
+     */
     @Override
     public BigDecimal predictSalary(String city, String experience, String education, String skills) {
-        // 第一步：获取基础平均薪资（数据库AVG作为基准线）
+        // 获取基础平均薪资
         BigDecimal baseAvg = jobMapper.predictSalary(city, experience, education, skills);
-
         if (baseAvg == null || baseAvg.compareTo(BigDecimal.ZERO) == 0) {
-            // 如果没有匹配数据，使用全国基准薪资估算
             baseAvg = new BigDecimal("12000");
         }
 
+        double factor = calculateSalaryFactor(city, experience, education, skills);
+        BigDecimal predicted = baseAvg.multiply(BigDecimal.valueOf(factor));
+
+        // 确保预测值在合理范围内
+        return predicted.max(new BigDecimal("5000"))
+                       .min(new BigDecimal("100000"))
+                       .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 计算薪资因子（独立抽取）
+     */
+    private double calculateSalaryFactor(String city, String experience, String education, String skills) {
         double factor = 1.0;
         int weightCount = 0;
 
-        // 第二步：应用城市加权因子（权重40%）
-        if (city != null && !city.isBlank() && CITY_SALARY_FACTOR.containsKey(city)) {
-            double cityFactor = CITY_SALARY_FACTOR.get(city);
-            factor += (cityFactor - 1.0) * 0.4;
+        // 城市加权因子
+        if (city != null && !city.isBlank() && SalaryFactors.CITY.containsKey(city)) {
+            factor += (SalaryFactors.CITY.get(city) - 1.0) * SalaryFactors.CITY_WEIGHT;
             weightCount++;
         }
 
-        // 第三步：应用经验加权因子（权重35%）
-        if (experience != null && !experience.isBlank() && EXP_SALARY_FACTOR.containsKey(experience)) {
-            double expFactor = EXP_SALARY_FACTOR.get(experience);
-            factor += (expFactor - 1.0) * 0.35;
+        // 经验加权因子
+        if (experience != null && !experience.isBlank() && SalaryFactors.EXPERIENCE.containsKey(experience)) {
+            factor += (SalaryFactors.EXPERIENCE.get(experience) - 1.0) * SalaryFactors.EXP_WEIGHT;
             weightCount++;
         }
 
-        // 第四步：应用学历加权因子（权重25%）
-        if (education != null && !education.isBlank() && EDU_SALARY_FACTOR.containsKey(education)) {
-            double eduFactor = EDU_SALARY_FACTOR.get(education);
-            factor += (eduFactor - 1.0) * 0.25;
+        // 学历加权因子
+        if (education != null && !education.isBlank() && SalaryFactors.EDUCATION.containsKey(education)) {
+            factor += (SalaryFactors.EDUCATION.get(education) - 1.0) * SalaryFactors.EDU_WEIGHT;
             weightCount++;
         }
 
-        // 第五步：技能溢价加成
+        // 技能溢价加成
         if (skills != null && !skills.isBlank()) {
-            String[] skillList = skills.split(",");
-            int premiumSkills = 0;
-            for (String s : skillList) {
-                String trimSkill = s.trim();
-                // 高薪技能列表
-                if ("算法".equals(trimSkill) || "大数据".equals(trimSkill) ||
-                    "人工智能".equals(trimSkill) || "机器学习".equals(trimSkill) ||
-                    "深度学习".equals(trimSkill) || "Go".equals(trimSkill) ||
-                    "架构师".equals(trimSkill)) {
-                    premiumSkills++;
-                }
-            }
-            // 每个高薪技能+5%，最多+15%
-            if (premiumSkills > 0) {
-                factor += Math.min(premiumSkills * 0.05, 0.15);
+            long premiumCount = Arrays.stream(skills.split(","))
+                    .map(String::trim)
+                    .filter(SalaryFactors.PREMIUM_SKILLS::contains)
+                    .count();
+            if (premiumCount > 0) {
+                factor += Math.min(premiumCount * SalaryFactors.PREMIUM_SKILL_BONUS, SalaryFactors.MAX_PREMIUM_BONUS);
                 weightCount++;
             }
         }
 
-        // 如果完全没有匹配任何条件，直接返回基础平均值
-        if (weightCount == 0) {
-            return baseAvg.setScale(2, RoundingMode.HALF_UP);
-        }
-
-        // 应用综合因子
-        BigDecimal predicted = baseAvg.multiply(BigDecimal.valueOf(factor));
-        
-        // 确保预测值在合理范围内（最低5k，最高100k）
-        predicted = predicted.max(new BigDecimal("5000")).min(new BigDecimal("100000"));
-        
-        return predicted.setScale(2, RoundingMode.HALF_UP);
+        return weightCount == 0 ? 1.0 : factor;
     }
 
     @Override
-    public List<Job> recommendJobs(String skills, String city) {
+    public List<Job> recommendJobs(String skills, String education, Integer experience, String city) {
         JobQueryDTO dto = new JobQueryDTO();
         dto.setCity(city);
-        dto.setKeyword(null);
         dto.setPageNum(1);
         dto.setPageSize(100);
         List<Job> list = jobMapper.selectByCondition(dto);
@@ -286,11 +245,37 @@ public class JobServiceImpl implements JobService {
         if (skills == null || skills.isEmpty()) {
             return list.stream().limit(10).collect(Collectors.toList());
         }
-        String[] wanted = skills.toLowerCase(Locale.ROOT).split(",");
+
+        Set<String> userSkills = parseSkills(skills);
+
+        Comparator<Job> comparator = (education != null && !education.isEmpty() && experience != null)
+            ? Comparator.comparingDouble(job -> calculateCompositeScore(job, userSkills, education, experience))
+            : Comparator.comparingDouble(job -> calculateJaccardSimilarity(userSkills, job.getSkills()) * 100);
+
         return list.stream()
-                .sorted(Comparator.comparingInt(j -> -matchScore((Job) j, wanted)))
+                .sorted(comparator.reversed())
                 .limit(10)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 解析技能字符串为集合
+     */
+    private Set<String> parseSkills(String skills) {
+        return Arrays.stream(skills.toLowerCase().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * 计算综合匹配分数
+     */
+    private double calculateCompositeScore(Job job, Set<String> userSkills, String education, Integer experience) {
+        double skillScore = calculateJaccardSimilarity(userSkills, job.getSkills()) * 100;
+        double eduScore = calculateEducationMatchScore(education, job.getEducation()).doubleValue();
+        double expScore = calculateExperienceMatchScore(experience, job.getExperience()).doubleValue();
+        return skillScore * SKILL_WEIGHT + eduScore * EDUCATION_WEIGHT + expScore * EXPERIENCE_WEIGHT;
     }
 
     @Override
@@ -300,62 +285,129 @@ public class JobServiceImpl implements JobService {
         List<JobStatVO> salaryStats = statBySalaryRange();
         List<JobStatVO> titleStats = statTopTitles();
 
-        JobStatVO topCity = cityStats.isEmpty() ? null : cityStats.get(0);
-        JobStatVO topSkill = skillStats.isEmpty() ? null : skillStats.get(0);
-        JobStatVO topTitle = titleStats.isEmpty() ? null : titleStats.get(0);
+        String topCity = cityStats.isEmpty() ? "暂无数据" : cityStats.get(0).getName();
+        String topSkill = skillStats.isEmpty() ? "暂无数据" : skillStats.get(0).getName();
+        String topTitle = titleStats.isEmpty() ? "暂无数据" : titleStats.get(0).getName();
         BigDecimal avg = predictSalary(null, null, null, null);
+
         JobStatVO topBand = salaryStats.stream()
                 .filter(Objects::nonNull)
                 .max(Comparator.comparingLong(v -> v.getCount() == null ? 0L : v.getCount()))
                 .orElse(null);
 
-        JobTrendVO trend = jobTrendLast7Days();
-        long last7 = trend == null || trend.getLast7Days() == null ? 0 : trend.getLast7Days();
-        long prev7 = trend == null || trend.getPrev7Days() == null ? 0 : trend.getPrev7Days();
-        String trendText;
-        if (prev7 == 0 && last7 == 0) {
-            trendText = "暂无可用趋势数据";
-        } else if (prev7 == 0) {
-            trendText = "近期需求明显增加";
-        } else {
-            double ratio = (last7 * 1.0d) / prev7;
-            if (ratio >= 1.15d) {
-                trendText = "近期需求呈上升趋势";
-            } else if (ratio <= 0.85d) {
-                trendText = "近期需求呈回落趋势";
-            } else {
-                trendText = "近期需求整体较为稳定";
-            }
-        }
+        String trendText = analyzeTrend(jobTrendLast7Days());
 
         return String.format(
-                "当前岗位需求较集中的城市为%s；热门岗位以%s为代表；热门技能以%s为代表；平均薪资约为%s元。薪资分布以%s区间为主，且%s。",
-                topCity == null ? "暂无数据" : topCity.getName(),
-                topTitle == null ? "暂无数据" : topTitle.getName(),
-                topSkill == null ? "暂无数据" : topSkill.getName(),
-                avg == null ? "0.00" : avg.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString(),
-                topBand == null ? "暂无数据" : topBand.getName(),
-                trendText
+            "当前岗位需求较集中的城市为%s；热门岗位以%s为代表；热门技能以%s为代表；平均薪资约为%s元。薪资分布以%s区间为主，且%s。",
+            topCity, topTitle, topSkill,
+            avg == null ? "0.00" : avg.setScale(2, RoundingMode.HALF_UP).toPlainString(),
+            topBand == null ? "暂无数据" : topBand.getName(),
+            trendText
         );
     }
 
-    private int matchScore(Job job, String[] wanted) {
-        if (job.getSkills() == null) return 0;
-        String s = job.getSkills().toLowerCase(Locale.ROOT);
-        int score = 0;
-        for (String w : wanted) {
-            if (s.contains(w.trim())) {
-                score++;
-            }
+    /**
+     * 分析趋势文本
+     */
+    private String analyzeTrend(JobTrendVO trend) {
+        if (trend == null) return "暂无可用趋势数据";
+
+        long last7 = trend.getLast7Days() == null ? 0 : trend.getLast7Days();
+        long prev7 = trend.getPrev7Days() == null ? 0 : trend.getPrev7Days();
+
+        if (prev7 == 0 && last7 == 0) return "暂无可用趋势数据";
+        if (prev7 == 0) return "近期需求明显增加";
+
+        double ratio = (double) last7 / prev7;
+        if (ratio >= 1.15) return "近期需求呈上升趋势";
+        if (ratio <= 0.85) return "近期需求呈回落趋势";
+        return "近期需求整体较为稳定";
+    }
+
+    /**
+     * 计算Jaccard相似度
+     */
+    private double calculateJaccardSimilarity(Set<String> userSkills, String jobSkillsStr) {
+        if (jobSkillsStr == null || jobSkillsStr.isEmpty()) return 0.0;
+
+        Set<String> jobSkills = Arrays.stream(jobSkillsStr.toLowerCase().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+
+        if (userSkills.isEmpty() && jobSkills.isEmpty()) return 0.0;
+
+        long intersection = userSkills.stream().filter(jobSkills::contains).count();
+        Set<String> union = new HashSet<>(userSkills);
+        union.addAll(jobSkills);
+
+        return union.isEmpty() ? 0.0 : (double) intersection / union.size();
+    }
+
+    /**
+     * 计算学历匹配分数
+     */
+    private BigDecimal calculateEducationMatchScore(String userEducation, String jobEducation) {
+        if (userEducation == null || userEducation.isEmpty() || jobEducation == null || jobEducation.isEmpty()) {
+            return BigDecimal.valueOf(50);
         }
-        return score;
+
+        Integer userLevel = EDUCATION_LEVEL.getOrDefault(userEducation, 0);
+        Integer jobLevel = EDUCATION_LEVEL.getOrDefault(jobEducation, 0);
+
+        if (jobLevel == 0) return BigDecimal.valueOf(80);
+        if (userLevel == jobLevel) return BigDecimal.valueOf(100);
+        if (userLevel >= jobLevel + 1) return BigDecimal.valueOf(80);
+        return BigDecimal.valueOf(20);
+    }
+
+    /**
+     * 计算经验匹配分数
+     */
+    private BigDecimal calculateExperienceMatchScore(Integer userYears, String jobExperience) {
+        if (userYears == null || userYears < 0 || jobExperience == null || jobExperience.isEmpty()) {
+            return BigDecimal.valueOf(50);
+        }
+
+        Integer jobYears = EXPERIENCE_YEARS.getOrDefault(jobExperience, 0);
+        if (jobYears == 0) return BigDecimal.valueOf(80);
+
+        int diff = Math.abs(userYears - jobYears);
+        if (diff == 0) return BigDecimal.valueOf(100);
+        if (diff <= 1) return BigDecimal.valueOf(85);
+        if (diff <= 2) return BigDecimal.valueOf(70);
+        if (diff <= 3) return BigDecimal.valueOf(50);
+        return BigDecimal.valueOf(30);
     }
 
     @Override
     public AIFeedbackVO analyzeWithAI(JobQueryDTO dto) {
         AIFeedbackVO result = new AIFeedbackVO();
+        List<Job> jobs = getJobsForAnalysis(dto);
 
-        // 获取筛选后的数据（不加分页，获取所有符合条件的数据）
+        if (jobs.isEmpty()) {
+            result.setSummary("暂无符合筛选条件的岗位数据");
+            result.setSuggestions(Collections.singletonList("建议：执行爬虫任务获取更多岗位数据"));
+            return result;
+        }
+
+        // 规则引擎数据聚合
+        result.setQualityJobs(extractQualityJobs(jobs));
+        result.setTrendAnalysis(analyzeTrend(jobs));
+        result.setSkillDemands(analyzeSkillDemands(jobs));
+        result.setSalaryAnalysis(analyzeSalary(jobs));
+        result.setSuggestions(generateSuggestions(jobs));
+
+        // AI增强分析报告
+        result.setSummary(generateAIAnalysisReport(jobs, result));
+
+        return result;
+    }
+
+    /**
+     * 获取用于分析的岗位数据
+     */
+    private List<Job> getJobsForAnalysis(JobQueryDTO dto) {
         JobQueryDTO queryDto = new JobQueryDTO();
         if (dto != null) {
             queryDto.setKeyword(dto.getKeyword());
@@ -371,46 +423,70 @@ public class JobServiceImpl implements JobService {
         }
         queryDto.setPageNum(1);
         queryDto.setPageSize(200);
+        return jobMapper.selectByCondition(queryDto);
+    }
 
-        List<Job> jobs = jobMapper.selectByCondition(queryDto);
-
-        if (jobs == null || jobs.isEmpty()) {
-            result.setSummary("暂无符合筛选条件的岗位数据，请尝试调整筛选条件或先进行数据爬取。");
-            result.setSuggestions(Collections.singletonList("建议：执行爬虫任务获取更多岗位数据后再进行分析"));
-            return result;
-        }
-
-        // ========== 第一阶段：规则引擎数据聚合（保持不变） ==========
-        
-        // 1. 优质岗位推荐
-        List<AIFeedbackVO.QualityJob> qualityJobs = new ArrayList<>();
-        List<Job> topJobs = jobs.stream()
+    /**
+     * 提取优质岗位
+     */
+    private List<AIFeedbackVO.QualityJob> extractQualityJobs(List<Job> jobs) {
+        return jobs.stream()
                 .sorted(Comparator.comparing(this::calculateJobScore).reversed())
                 .limit(10)
+                .map(this::convertToQualityJob)
                 .collect(Collectors.toList());
+    }
 
-        for (Job job : topJobs) {
-            AIFeedbackVO.QualityJob qj = new AIFeedbackVO.QualityJob();
-            qj.setId(job.getId());
-            qj.setTitle(job.getTitle());
-            qj.setCompanyName(job.getCompanyName());
-            qj.setCity(job.getCity());
-            qj.setSalary(formatSalary(job.getMinSalary(), job.getMaxSalary()));
-            qj.setSkills(job.getSkills());
-            qj.setRecommendReason(generateRecommendReason(job));
-            qualityJobs.add(qj);
-        }
-        result.setQualityJobs(qualityJobs);
+    /**
+     * 转换为QualityJob对象
+     */
+    private AIFeedbackVO.QualityJob convertToQualityJob(Job job) {
+        AIFeedbackVO.QualityJob qj = new AIFeedbackVO.QualityJob();
+        qj.setId(job.getId());
+        qj.setTitle(job.getTitle());
+        qj.setCompanyName(job.getCompanyName());
+        qj.setCity(job.getCity());
+        qj.setSalary(formatSalary(job.getMinSalary(), job.getMaxSalary()));
+        qj.setSkills(job.getSkills());
+        qj.setRecommendReason(generateRecommendReason(job));
+        return qj;
+    }
 
-        // 2. 需求趋势分析
+    /**
+     * 分析趋势
+     */
+    private AIFeedbackVO.TrendAnalysis analyzeTrend(List<Job> jobs) {
         AIFeedbackVO.TrendAnalysis trend = new AIFeedbackVO.TrendAnalysis();
-        Map<String, Long> cityCount = jobs.stream()
+
+        String hotCity = jobs.stream()
                 .filter(j -> j.getCity() != null && !j.getCity().isBlank() && !j.getCity().equals("未知"))
-                .collect(Collectors.groupingBy(Job::getCity, Collectors.counting()));
-        String hotCity = cityCount.isEmpty() ? "暂无数据" :
-                cityCount.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
+                .collect(Collectors.groupingBy(Job::getCity, Collectors.counting()))
+                .entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("暂无数据");
         trend.setHotCity(hotCity);
 
+        String hotSkill = analyzeHotSkill(jobs);
+        trend.setHotSkill(hotSkill);
+
+        String hotTitle = jobs.stream()
+                .filter(j -> j.getTitle() != null && !j.getTitle().isBlank())
+                .collect(Collectors.groupingBy(Job::getTitle, Collectors.counting()))
+                .entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("暂无数据");
+        trend.setHotTitle(hotTitle);
+
+        trend.setTrendText(String.format("当前热门城市为%s，热门技能为%s，热门岗位为%s。", hotCity, hotSkill, hotTitle));
+        return trend;
+    }
+
+    /**
+     * 分析热门技能
+     */
+    private String analyzeHotSkill(List<Job> jobs) {
         Map<String, Long> skillCount = new HashMap<>();
         for (Job job : jobs) {
             if (job.getSkills() != null) {
@@ -419,304 +495,249 @@ public class JobServiceImpl implements JobService {
                 }
             }
         }
-        String hotSkill = skillCount.isEmpty() ? "暂无数据" :
-                skillCount.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
-        trend.setHotSkill(hotSkill);
+        return skillCount.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("暂无数据");
+    }
 
-        Map<String, Long> titleCount = jobs.stream()
-                .filter(j -> j.getTitle() != null && !j.getTitle().isBlank())
-                .collect(Collectors.groupingBy(Job::getTitle, Collectors.counting()));
-        String hotTitle = titleCount.isEmpty() ? "暂无数据" :
-                titleCount.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
-        trend.setHotTitle(hotTitle);
+    /**
+     * 分析技能需求
+     */
+    private List<AIFeedbackVO.SkillDemand> analyzeSkillDemands(List<Job> jobs) {
+        Map<String, Long> skillCount = new HashMap<>();
+        for (Job job : jobs) {
+            if (job.getSkills() != null) {
+                for (String skill : job.getSkills().split(",")) {
+                    skillCount.merge(skill.trim(), 1L, Long::sum);
+                }
+            }
+        }
 
-        String trendText = String.format("当前热门城市为%s，热门技能为%s，热门岗位为%s。",
-                hotCity, hotSkill, hotTitle);
-        trend.setTrendText(trendText);
-        result.setTrendAnalysis(trend);
+        long maxCount = skillCount.values().stream().max(Long::compare).orElse(1L);
 
-        // 3. 技能需求排名
-        List<AIFeedbackVO.SkillDemand> skillDemands = skillCount.entrySet().stream()
+        return skillCount.entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .limit(10)
                 .map(e -> {
                     AIFeedbackVO.SkillDemand sd = new AIFeedbackVO.SkillDemand();
                     sd.setSkill(e.getKey());
                     sd.setCount(e.getValue().intValue());
-                    long max = skillCount.values().stream().max(Long::compare).orElse(1L);
-                    if (e.getValue() >= max * 0.8) {
-                        sd.setLevel("非常热门");
-                    } else if (e.getValue() >= max * 0.5) {
-                        sd.setLevel("热门");
-                    } else {
-                        sd.setLevel("一般");
-                    }
+                    sd.setLevel(e.getValue() >= maxCount * 0.8 ? "非常热门" :
+                               e.getValue() >= maxCount * 0.5 ? "热门" : "一般");
                     return sd;
                 })
                 .collect(Collectors.toList());
-        result.setSkillDemands(skillDemands);
-
-        // 4. 薪资分析
-        AIFeedbackVO.SalaryAnalysis salaryAnalysis = computeSalaryAnalysis(jobs);
-        result.setSalaryAnalysis(salaryAnalysis);
-
-        // 5. 求职建议（先基于规则的默认建议）
-        List<String> suggestions = generateSuggestions(jobs, hotCity, hotSkill, skillDemands);
-        result.setSuggestions(suggestions);
-
-        // ========== 第二阶段：AI增强分析报告生成 ==========
-        String aiSummary = generateAIAnalysisReport(jobs, hotCity, hotSkill, hotTitle,
-                qualityJobs, skillDemands, salaryAnalysis, trendText);
-        result.setSummary(aiSummary);
-
-        return result;
     }
 
     /**
-     * 薪资分析计算（抽取为独立方法复用）
+     * 分析薪资
      */
-    private AIFeedbackVO.SalaryAnalysis computeSalaryAnalysis(List<Job> jobs) {
-        AIFeedbackVO.SalaryAnalysis salaryAnalysis = new AIFeedbackVO.SalaryAnalysis();
-        BigDecimal totalSalary = BigDecimal.ZERO;
-        BigDecimal maxSalary = BigDecimal.ZERO;
-        int count = 0;
-        for (Job job : jobs) {
-            if (job.getMaxSalary() != null) {
-                BigDecimal avg = job.getMaxSalary();
-                totalSalary = totalSalary.add(avg);
-                if (avg.compareTo(maxSalary) > 0) {
-                    maxSalary = avg;
-                }
-                count++;
-            }
-        }
-        if (count > 0) {
-            BigDecimal avgSalary = totalSalary.divide(BigDecimal.valueOf(count), 2, RoundingMode.HALF_UP);
-            salaryAnalysis.setAvgSalary(avgSalary.toPlainString() + "元/月");
-            salaryAnalysis.setTopSalary(maxSalary.setScale(0, RoundingMode.HALF_UP).toPlainString() + "元/月");
+    private AIFeedbackVO.SalaryAnalysis analyzeSalary(List<Job> jobs) {
+        AIFeedbackVO.SalaryAnalysis analysis = new AIFeedbackVO.SalaryAnalysis();
 
-            List<BigDecimal> salaries = jobs.stream()
-                    .filter(j -> j.getMaxSalary() != null)
-                    .map(Job::getMaxSalary)
-                    .sorted()
-                    .collect(Collectors.toList());
-            if (!salaries.isEmpty()) {
-                int lowIdx = salaries.size() / 4;
-                int highIdx = salaries.size() * 3 / 4;
-                salaryAnalysis.setSalaryRange(salaries.get(lowIdx).setScale(0, RoundingMode.HALF_UP).toPlainString() +
-                        "-" + salaries.get(highIdx).setScale(0, RoundingMode.HALF_UP).toPlainString() + "元/月");
-            }
-        } else {
-            salaryAnalysis.setAvgSalary("暂无数据");
-            salaryAnalysis.setTopSalary("暂无数据");
-            salaryAnalysis.setSalaryRange("暂无数据");
+        List<BigDecimal> salaries = jobs.stream()
+                .filter(j -> j.getMaxSalary() != null)
+                .map(Job::getMaxSalary)
+                .sorted()
+                .collect(Collectors.toList());
+
+        if (salaries.isEmpty()) {
+            analysis.setAvgSalary("暂无数据");
+            analysis.setTopSalary("暂无数据");
+            analysis.setSalaryRange("暂无数据");
+            return analysis;
         }
-        return salaryAnalysis;
+
+        BigDecimal total = salaries.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal avg = total.divide(BigDecimal.valueOf(salaries.size()), 2, RoundingMode.HALF_UP);
+        BigDecimal max = salaries.get(salaries.size() - 1);
+
+        int lowIdx = salaries.size() / 4;
+        int highIdx = salaries.size() * 3 / 4;
+
+        analysis.setAvgSalary(avg.toPlainString() + "元/月");
+        analysis.setTopSalary(max.setScale(0, RoundingMode.HALF_UP).toPlainString() + "元/月");
+        analysis.setSalaryRange(salaries.get(lowIdx).setScale(0, RoundingMode.HALF_UP).toPlainString() +
+                "-" + salaries.get(highIdx).setScale(0, RoundingMode.HALF_UP).toPlainString() + "元/月");
+
+        return analysis;
     }
 
     /**
-     * 根据环境变量配置自动选择AI或规则引擎生成分析报告
-     * 如果配置了ZHIPUAI_API_KEY环境变量，则使用智谱AI；否则使用规则引擎
+     * 生成建议
      */
-    private String generateAIAnalysisReport(List<Job> jobs, String hotCity, String hotSkill,
-                                            String hotTitle, List<AIFeedbackVO.QualityJob> qualityJobs,
-                                            List<AIFeedbackVO.SkillDemand> skillDemands,
-                                            AIFeedbackVO.SalaryAnalysis salaryAnalysis,
-                                            String trendText) {
-        // 根据环境变量配置自动选择
-        if (aiService.isApiKeyConfigured()) {
-            log.info("检测到ZHIPUAI_API_KEY环境变量，使用智谱AI生成分析报告");
-            return generateAIAnalysisWithAI(jobs, hotCity, hotSkill, hotTitle, qualityJobs, 
-                                            skillDemands, salaryAnalysis, trendText);
-        } else {
-            log.info("未配置ZHIPUAI_API_KEY环境变量，使用规则引擎生成分析报告");
-            return buildRuleBasedSummary(jobs.size(), hotCity, hotSkill, hotTitle, salaryAnalysis, trendText);
-        }
+    private List<String> generateSuggestions(List<Job> jobs) {
+        List<String> suggestions = new ArrayList<>();
+
+        String hotCity = jobs.stream()
+                .filter(j -> j.getCity() != null && !j.getCity().isBlank())
+                .collect(Collectors.groupingBy(Job::getCity, Collectors.counting()))
+                .entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("一线");
+        suggestions.add(String.format("建议优先考虑%s等一线城市，岗位机会多、薪资水平高。", hotCity));
+
+        String topEdu = jobs.stream()
+                .filter(j -> j.getEducation() != null)
+                .collect(Collectors.groupingBy(Job::getEducation, Collectors.counting()))
+                .entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("本科");
+        suggestions.add(String.format("当前%s学历岗位占比最高，建议根据自身情况合理定位。", topEdu));
+
+        String topExp = jobs.stream()
+                .filter(j -> j.getExperience() != null)
+                .collect(Collectors.groupingBy(Job::getExperience, Collectors.counting()))
+                .entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("1-3年");
+        suggestions.add(String.format("市场对%s经验的需求最大，建议积累相应项目经验。", topExp));
+
+        suggestions.add("建议持续关注BOSS直聘、智联招聘、前程无忧、猎聘四大平台，岗位更新及时。");
+        suggestions.add("面试时突出项目经验和实际问题解决能力，展示个人技术成长空间。");
+
+        return suggestions;
     }
 
     /**
-     * 调用智谱AI生成专业的数据分析报告
+     * 生成AI分析报告
      */
-    private String generateAIAnalysisWithAI(List<Job> jobs, String hotCity, String hotSkill,
-                                            String hotTitle, List<AIFeedbackVO.QualityJob> qualityJobs,
-                                            List<AIFeedbackVO.SkillDemand> skillDemands,
-                                            AIFeedbackVO.SalaryAnalysis salaryAnalysis,
-                                            String trendText) {
+    private String generateAIAnalysisReport(List<Job> jobs, AIFeedbackVO result) {
+        if (!aiService.isApiKeyConfigured()) {
+            return buildRuleBasedSummary(jobs.size(), result);
+        }
+
         try {
-            StringBuilder dataContext = new StringBuilder();
-            dataContext.append("请根据以下招聘数据进行专业分析，生成一份结构化的分析报告。\n\n");
-            
-            dataContext.append("【基础数据概况】\n");
-            dataContext.append("- 样本总量：").append(jobs.size()).append("个岗位\n");
-            dataContext.append("- 热门城市：").append(hotCity).append("\n");
-            dataContext.append("- 热门技能：").append(hotSkill).append("\n");
-            dataContext.append("- 热门岗位：").append(hotTitle).append("\n");
-            dataContext.append("- 平均薪资：").append(salaryAnalysis.getAvgSalary()).append("\n");
-            dataContext.append("- 最高薪资：").append(salaryAnalysis.getTopSalary()).append("\n");
-            dataContext.append("- 薪资区间：").append(salaryAnalysis.getSalaryRange()).append("\n\n");
-
-            dataContext.append("【优质岗位推荐TOP5】\n");
-            for (int i = 0; i < Math.min(5, qualityJobs.size()); i++) {
-                AIFeedbackVO.QualityJob j = qualityJobs.get(i);
-                dataContext.append(String.format("%d. %s - %s (%s) [%s]\n",
-                        i + 1, j.getTitle(), j.getCompanyName(), j.getSalary(), j.getCity()));
-            }
-            dataContext.append("\n");
-
-            dataContext.append("【技能需求排名】\n");
-            for (int i = 0; i < Math.min(8, skillDemands.size()); i++) {
-                AIFeedbackVO.SkillDemand sd = skillDemands.get(i);
-                dataContext.append(String.format("%d. %s: %d个岗位(%s)\n",
-                        i + 1, sd.getSkill(), sd.getCount(), sd.getLevel()));
-            }
-            dataContext.append("\n");
-
-            dataContext.append("【趋势概述】").append(trendText).append("\n\n");
-
-            Map<String, Long> eduCount = jobs.stream()
-                    .filter(j -> j.getEducation() != null)
-                    .collect(Collectors.groupingBy(Job::getEducation, Collectors.counting()));
-            if (!eduCount.isEmpty()) {
-                dataContext.append("【学历要求分布】\n");
-                eduCount.entrySet().stream()
-                        .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                        .forEach(e -> dataContext.append("- ").append(e.getKey()).append(": ").append(e.getValue()).append("个\n"));
-                dataContext.append("\n");
-            }
-
-            Map<String, Long> expCount = jobs.stream()
-                    .filter(j -> j.getExperience() != null)
-                    .collect(Collectors.groupingBy(Job::getExperience, Collectors.counting()));
-            if (!expCount.isEmpty()) {
-                dataContext.append("【经验要求分布】\n");
-                expCount.entrySet().stream()
-                        .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                        .forEach(e -> dataContext.append("- ").append(e.getKey()).append(": ").append(e.getValue()).append("个\n"));
-                dataContext.append("\n");
-            }
-
-            dataContext.append("""
-                    请按以下格式输出分析报告（使用Markdown格式）：
-                    
-                    ## 📊 数据总览
-                    （简要总结整体情况）
-                    
-                    ## 🏙️ 城市与薪资分析
-                    （分析各城市就业机会和薪资水平）
-                    
-                    ## 💻 技能与岗位洞察
-                    （分析热门技能的市场需求和前景）
-                    
-                    ## 💡 求职建议
-                    （给出3-5条具体可执行的建议）
-                    
-                    请确保分析有据可依，基于上述真实数据。
-                    """);
-
-            String analysisSystemPrompt = """
-                    你是一位资深招聘市场数据分析师，擅长从招聘数据中发现趋势、洞察机会。
-                    你需要基于用户提供的数据进行客观、专业的分析，给出有价值的求职建议。
-                    回答使用中文，采用Markdown格式，适当使用emoji增强可读性。
-                    
-                    【输出格式规范】
-                    - 使用 ## 作为主标题，### 作为子标题
-                    - 使用 **粗体** 强调关键数据
-                    - 使用表格展示对比数据
-                    - 使用列表展示要点
-                    - 每段之间空行，保持段落简洁
-                    """;
-
-            String aiResponse = aiService.chatSync(analysisSystemPrompt, dataContext.toString());
-
-            if (aiResponse != null && !aiResponse.isBlank()) {
-                log.info("AI分析报告生成成功，长度: {}", aiResponse.length());
-                return aiResponse;
-            } else {
-                log.warn("AI返回空结果，回退到规则引擎摘要");
-                return buildRuleBasedSummary(jobs.size(), hotCity, hotSkill, hotTitle, salaryAnalysis, trendText);
-            }
-
+            String aiResponse = aiService.chatSync(buildSystemPrompt(), buildDataContext(jobs, result));
+            return aiResponse != null && !aiResponse.isBlank() ? aiResponse : buildRuleBasedSummary(jobs.size(), result);
         } catch (Exception e) {
-            log.error("AI分析报告生成失败，回退到规则引擎: {}", e.getMessage());
-            return buildRuleBasedSummary(jobs.size(), hotCity, hotSkill, hotTitle, salaryAnalysis, trendText);
+            log.error("AI分析报告生成失败: {}", e.getMessage());
+            return buildRuleBasedSummary(jobs.size(), result);
         }
     }
 
     /**
-     * 规则引擎兜底摘要（当AI不可用时使用）
+     * 构建系统提示词
      */
-    private String buildRuleBasedSummary(int jobCount, String hotCity, String hotSkill,
-                                          String hotTitle, AIFeedbackVO.SalaryAnalysis salaryAnalysis,
-                                          String trendText) {
+    private String buildSystemPrompt() {
+        return """
+            你是一位资深招聘市场数据分析师，擅长从招聘数据中发现趋势、洞察机会。
+            你需要基于用户提供的数据进行客观、专业的分析，给出有价值的求职建议。
+            回答使用中文，采用Markdown格式，适当使用emoji增强可读性。
+            输出使用##作为主标题，###作为子标题，使用**粗体**强调关键数据。
+            """;
+    }
+
+    /**
+     * 构建数据上下文
+     */
+    private String buildDataContext(List<Job> jobs, AIFeedbackVO result) {
+        StringBuilder context = new StringBuilder();
+        context.append("请根据以下招聘数据进行专业分析，生成一份结构化的分析报告。\n\n");
+        context.append("【基础数据概况】\n");
+        context.append("- 样本总量：").append(jobs.size()).append("个岗位\n");
+
+        AIFeedbackVO.TrendAnalysis trend = result.getTrendAnalysis();
+        if (trend != null) {
+            context.append("- 热门城市：").append(trend.getHotCity()).append("\n");
+            context.append("- 热门技能：").append(trend.getHotSkill()).append("\n");
+            context.append("- 热门岗位：").append(trend.getHotTitle()).append("\n");
+        }
+
+        AIFeedbackVO.SalaryAnalysis salary = result.getSalaryAnalysis();
+        if (salary != null) {
+            context.append("- 平均薪资：").append(salary.getAvgSalary()).append("\n");
+            context.append("- 最高薪资：").append(salary.getTopSalary()).append("\n");
+            context.append("- 薪资区间：").append(salary.getSalaryRange()).append("\n");
+        }
+
+        context.append("\n请按以下格式输出分析报告（使用Markdown格式）：\n");
+        context.append("## 📊 数据总览\n（简要总结整体情况）\n");
+        context.append("## 🏙️ 城市与薪资分析\n（分析各城市就业机会和薪资水平）\n");
+        context.append("## 💻 技能与岗位洞察\n（分析热门技能的市场需求和前景）\n");
+        context.append("## 💡 求职建议\n（给出3-5条具体可执行的建议）\n");
+        context.append("请确保分析有据可依，基于上述真实数据。");
+
+        return context.toString();
+    }
+
+    /**
+     * 规则引擎兜底摘要
+     */
+    private String buildRuleBasedSummary(int jobCount, AIFeedbackVO result) {
+        AIFeedbackVO.TrendAnalysis trend = result.getTrendAnalysis();
+        AIFeedbackVO.SalaryAnalysis salary = result.getSalaryAnalysis();
+
         return String.format(
-                "## 📊 数据总览\n\n" +
-                "当前共找到 **%d** 个符合条件的活跃岗位。以下是基于数据的智能分析报告。\n\n" +
-                "## 🏙️ 城市与薪资分析\n\n" +
-                "- **最热城市**：%s，岗位机会集中\n" +
-                "- **平均薪资**：%s\n" +
-                "- **薪资区间**：%s\n" +
-                "- **最高薪资**：%s\n\n" +
-                "## 💻 技能与岗位洞察\n\n" +
-                "- **热门技能**：%s，市场需求旺盛\n" +
-                "- **热门岗位**：%s，代表当前招聘热点方向\n\n" +
-                "## 📈 趋势判断\n\n" +
-                "%s\n\n" +
-                "## 💡 求职建议\n\n" +
-                "1. 优先关注 **%s** 等一线城市，机会多薪资高\n" +
-                "2. 重点提升 **%s** 相关技术能力\n" +
-                "3. 关注 **%s** 领域岗位，需求量大\n" +
-                "4. 根据自身经验水平合理定位，应届生可从实习/初级岗入手\n" +
-                "5. 多平台投递，提高面试成功率\n\n" +
-                "> ✅ 以上分析基于系统中已爬取的真实招聘数据生成。",
-                jobCount, hotCity, salaryAnalysis.getAvgSalary(),
-                salaryAnalysis.getSalaryRange(), salaryAnalysis.getTopSalary(),
-                hotSkill, hotTitle, trendText, hotCity, hotSkill, hotTitle
+            "## 📊 数据总览\n\n当前共找到 **%d** 个符合条件的活跃岗位。\n\n" +
+            "## 🏙️ 城市与薪资分析\n\n" +
+            "- **最热城市**：%s\n- **平均薪资**：%s\n- **薪资区间**：%s\n- **最高薪资**：%s\n\n" +
+            "## 💻 技能与岗位洞察\n\n" +
+            "- **热门技能**：%s\n- **热门岗位**：%s\n\n" +
+            "## 💡 求职建议\n\n" +
+            "1. 优先关注 **%s** 等一线城市，机会多薪资高\n" +
+            "2. 重点提升技术能力，关注市场需求\n" +
+            "3. 根据自身经验水平合理定位\n" +
+            "4. 多平台投递，提高面试成功率\n\n" +
+            "> ✅ 以上分析基于系统中已爬取的真实招聘数据生成。",
+            jobCount,
+            trend != null ? trend.getHotCity() : "暂无数据",
+            salary != null ? salary.getAvgSalary() : "暂无数据",
+            salary != null ? salary.getSalaryRange() : "暂无数据",
+            salary != null ? salary.getTopSalary() : "暂无数据",
+            trend != null ? trend.getHotSkill() : "暂无数据",
+            trend != null ? trend.getHotTitle() : "暂无数据",
+            trend != null ? trend.getHotCity() : "一线"
         );
     }
 
+    /**
+     * 计算岗位分数
+     */
     private int calculateJobScore(Job job) {
         int score = 0;
-        // 薪资得分
         if (job.getMaxSalary() != null) {
             score += job.getMaxSalary().divide(BigDecimal.valueOf(1000), 2, RoundingMode.HALF_UP).intValue();
         }
-        // 技能匹配得分
         if (job.getSkills() != null) {
             for (String skill : job.getSkills().split(",")) {
                 score += SKILL_WEIGHTS.getOrDefault(skill.trim(), 1);
             }
         }
-        // 热门城市加成
-        Set<String> hotCities = new HashSet<>(Arrays.asList("北京", "上海", "广州", "深圳", "杭州"));
+        Set<String> hotCities = Set.of("北京", "上海", "广州", "深圳", "杭州");
         if (job.getCity() != null && hotCities.contains(job.getCity())) {
             score += 20;
         }
         return score;
     }
 
+    /**
+     * 格式化薪资
+     */
     private String formatSalary(BigDecimal min, BigDecimal max) {
         if (min == null && max == null) return "面议";
         if (min != null && max != null) {
             return min.setScale(0, RoundingMode.HALF_UP) + "-" + max.setScale(0, RoundingMode.HALF_UP) + "元/月";
         }
-        if (max != null) {
-            return max.setScale(0, RoundingMode.HALF_UP) + "元/月以下";
-        }
-        if (min != null) {
-            return min.setScale(0, RoundingMode.HALF_UP) + "元/月以上";
-        }
+        if (max != null) return max.setScale(0, RoundingMode.HALF_UP) + "元/月以下";
+        if (min != null) return min.setScale(0, RoundingMode.HALF_UP) + "元/月以上";
         return "薪资面议";
     }
 
+    /**
+     * 生成推荐理由
+     */
     private String generateRecommendReason(Job job) {
         StringBuilder sb = new StringBuilder();
-        // 薪资优势
         if (job.getMaxSalary() != null && job.getMaxSalary().compareTo(BigDecimal.valueOf(20000)) > 0) {
             sb.append("薪资竞争力强；");
         }
-        // 技能匹配
         if (job.getSkills() != null) {
-            List<String> hotSkills = Arrays.asList("Java", "Python", "Go", "大数据", "算法", "Vue", "React");
+            Set<String> hotSkills = Set.of("Java", "Python", "Go", "大数据", "算法", "Vue", "React");
             for (String skill : job.getSkills().split(",")) {
                 if (hotSkills.contains(skill.trim())) {
                     sb.append("热门技术栈").append(skill.trim()).append("；");
@@ -724,94 +745,12 @@ public class JobServiceImpl implements JobService {
                 }
             }
         }
-        // 城市优势
-        Set<String> tier1Cities = new HashSet<>(Arrays.asList("北京", "上海", "广州", "深圳", "杭州"));
+        Set<String> tier1Cities = Set.of("北京", "上海", "广州", "深圳", "杭州");
         if (job.getCity() != null && tier1Cities.contains(job.getCity())) {
             sb.append("一线城市发展机会多；");
         }
-        if (sb.length() == 0) {
-            sb.append("综合条件良好");
-        }
-        return sb.toString();
+        return sb.length() == 0 ? "综合条件良好" : sb.toString();
     }
-
-    private List<String> generateSuggestions(List<Job> jobs, String hotCity, String hotSkill,
-                                            List<AIFeedbackVO.SkillDemand> skillDemands) {
-        List<String> suggestions = new ArrayList<>();
-
-        // 城市建议
-        suggestions.add(String.format("建议优先考虑%s等一线城市，岗位机会多、薪资水平高。", hotCity));
-
-        // 技能建议
-        if (skillDemands.size() >= 3) {
-            String top3Skills = skillDemands.stream()
-                    .limit(3)
-                    .map(AIFeedbackVO.SkillDemand::getSkill)
-                    .collect(Collectors.joining("、"));
-            suggestions.add(String.format("重点学习：%s，这些技能在当前市场需求最高。", top3Skills));
-        }
-
-        // 学历建议
-        Map<String, Long> eduCount = jobs.stream()
-                .filter(j -> j.getEducation() != null)
-                .collect(Collectors.groupingBy(Job::getEducation, Collectors.counting()));
-        if (!eduCount.isEmpty()) {
-            String topEdu = eduCount.entrySet().stream()
-                    .max(Map.Entry.comparingByValue())
-                    .orElseThrow().getKey();
-            suggestions.add(String.format("当前%s学历岗位占比最高，建议根据自身情况合理定位。", topEdu));
-        }
-
-        // 经验建议
-        Map<String, Long> expCount = jobs.stream()
-                .filter(j -> j.getExperience() != null)
-                .collect(Collectors.groupingBy(Job::getExperience, Collectors.counting()));
-        if (!expCount.isEmpty()) {
-            String topExp = expCount.entrySet().stream()
-                    .max(Map.Entry.comparingByValue())
-                    .orElseThrow().getKey();
-            suggestions.add(String.format("市场对%s经验的需求最大，建议积累相应项目经验。", topExp));
-        }
-
-        // 通用建议
-        suggestions.add("建议持续关注BOSS直聘、智联招聘、前程无忧、猎聘四大平台，岗位更新及时。");
-        suggestions.add("面试时突出项目经验和实际问题解决能力，展示个人技术成长空间。");
-
-        return suggestions;
-    }
-
-    // ==================== 多级权重合成技能契合算法实现 ====================
-
-    // 学历等级定义（用于计算学历契合度）
-    private static final Map<String, Integer> EDUCATION_LEVEL = new HashMap<>();
-    static {
-        EDUCATION_LEVEL.put("初中及以下", 1);
-        EDUCATION_LEVEL.put("高中", 2);
-        EDUCATION_LEVEL.put("中专", 3);
-        EDUCATION_LEVEL.put("大专", 4);
-        EDUCATION_LEVEL.put("本科", 5);
-        EDUCATION_LEVEL.put("硕士", 6);
-        EDUCATION_LEVEL.put("博士", 7);
-        EDUCATION_LEVEL.put("不限", 0);
-    }
-
-    // 经验年限映射（用于从经验字符串提取年限）
-    private static final Map<String, Integer> EXPERIENCE_YEARS = new HashMap<>();
-    static {
-        EXPERIENCE_YEARS.put("应届", 0);
-        EXPERIENCE_YEARS.put("经验不限", 0);
-        EXPERIENCE_YEARS.put("1年以下", 0);
-        EXPERIENCE_YEARS.put("1-3年", 2);
-        EXPERIENCE_YEARS.put("3-5年", 4);
-        EXPERIENCE_YEARS.put("5-10年", 7);
-        EXPERIENCE_YEARS.put("10年以上", 10);
-        EXPERIENCE_YEARS.put("不限", 0);
-    }
-
-    // 权重配置
-    private static final double SKILL_WEIGHT = 0.7;
-    private static final double EDUCATION_WEIGHT = 0.2;
-    private static final double EXPERIENCE_WEIGHT = 0.1;
 
     @Override
     public List<JobRecommendVO> intelligentRecommend(JobRecommendDTO dto) {
@@ -819,25 +758,21 @@ public class JobServiceImpl implements JobService {
         queryDto.setCity(dto.getCity());
         queryDto.setPageNum(1);
         queryDto.setPageSize(200);
-        
-        List<Job> jobs = jobMapper.selectByCondition(queryDto);
-        
-        if (jobs.isEmpty()) {
-            return Collections.emptyList();
-        }
 
-        String userSkills = dto.getSkills();
-        String userEducation = dto.getEducation();
-        Integer userExperienceYears = dto.getExperienceYears();
+        List<Job> jobs = jobMapper.selectByCondition(queryDto);
+        if (jobs.isEmpty()) return Collections.emptyList();
 
         return jobs.stream()
-                .map(job -> calculateMatchScore(job, userSkills, userEducation, userExperienceYears))
+                .map(job -> calculateMatchScore(job, dto.getSkills(), dto.getEducation(), dto.getExperienceYears()))
                 .filter(vo -> vo.getOverallScore().compareTo(BigDecimal.ZERO) > 0)
                 .sorted(Comparator.comparing(JobRecommendVO::getOverallScore).reversed())
                 .limit(dto.getLimit() != null ? dto.getLimit() : 10)
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 计算匹配分数（智能推荐）
+     */
     private JobRecommendVO calculateMatchScore(Job job, String userSkills, String userEducation, Integer userExperienceYears) {
         JobRecommendVO vo = new JobRecommendVO();
         vo.setJobId(job.getId());
@@ -848,6 +783,8 @@ public class JobServiceImpl implements JobService {
         vo.setSkills(job.getSkills());
         vo.setEducation(job.getEducation());
         vo.setExperience(job.getExperience());
+        vo.setUrl(job.getUrl());
+        vo.setSourceSite(job.getSourceSite());
 
         BigDecimal skillScore = calculateSkillMatchScore(userSkills, job.getSkills());
         BigDecimal educationScore = calculateEducationMatchScore(userEducation, job.getEducation());
@@ -866,8 +803,7 @@ public class JobServiceImpl implements JobService {
     }
 
     /**
-     * 计算技能契合度 - 使用Jaccard相似系数
-     * Jaccard系数 = 两个集合的交集大小 / 并集大小
+     * 计算技能匹配分数
      */
     private BigDecimal calculateSkillMatchScore(String userSkills, String jobSkills) {
         if (userSkills == null || userSkills.isEmpty() || jobSkills == null || jobSkills.isEmpty()) {
@@ -888,81 +824,11 @@ public class JobServiceImpl implements JobService {
             return BigDecimal.ZERO;
         }
 
-        // 计算交集
-        long intersection = userSkillSet.stream()
-                .filter(jobSkillSet::contains)
-                .count();
-
-        // 计算并集
+        long intersection = userSkillSet.stream().filter(jobSkillSet::contains).count();
         Set<String> union = new HashSet<>(userSkillSet);
         union.addAll(jobSkillSet);
 
-        if (union.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-
-        // Jaccard相似系数
-        double jaccard = (double) intersection / union.size();
-        return BigDecimal.valueOf(jaccard * 100).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    /**
-     * 计算学历契合度
-     * 规则：
-     * - 用户学历正好达到岗位要求：100%
-     * - 用户学历超出要求至少一个级别：80%
-     * - 用户学历低于岗位要求：20%
-     */
-    private BigDecimal calculateEducationMatchScore(String userEducation, String jobEducation) {
-        if (userEducation == null || userEducation.isEmpty() || 
-            jobEducation == null || jobEducation.isEmpty()) {
-            return BigDecimal.valueOf(50);
-        }
-
-        Integer userLevel = EDUCATION_LEVEL.getOrDefault(userEducation, 0);
-        Integer jobLevel = EDUCATION_LEVEL.getOrDefault(jobEducation, 0);
-
-        if (jobLevel == 0) {
-            return BigDecimal.valueOf(80);
-        }
-
-        if (userLevel == jobLevel) {
-            return BigDecimal.valueOf(100);
-        } else if (userLevel >= jobLevel + 1) {
-            return BigDecimal.valueOf(80);
-        } else {
-            return BigDecimal.valueOf(20);
-        }
-    }
-
-    /**
-     * 计算工作经验契合度
-     * 规则：考量应聘者实际工作时长与岗位所需经验时长的契合程度，设有±1的灵活范围
-     */
-    private BigDecimal calculateExperienceMatchScore(Integer userYears, String jobExperience) {
-        if (userYears == null || userYears < 0 || jobExperience == null || jobExperience.isEmpty()) {
-            return BigDecimal.valueOf(50);
-        }
-
-        Integer jobYears = EXPERIENCE_YEARS.getOrDefault(jobExperience, 0);
-
-        if (jobYears == 0) {
-            return BigDecimal.valueOf(80);
-        }
-
-        int diff = Math.abs(userYears - jobYears);
-
-        if (diff == 0) {
-            return BigDecimal.valueOf(100);
-        } else if (diff <= 1) {
-            return BigDecimal.valueOf(85);
-        } else if (diff <= 2) {
-            return BigDecimal.valueOf(70);
-        } else if (diff <= 3) {
-            return BigDecimal.valueOf(50);
-        } else {
-            return BigDecimal.valueOf(30);
-        }
+        return union.isEmpty() ? BigDecimal.ZERO :
+               BigDecimal.valueOf((double) intersection / union.size() * 100).setScale(2, RoundingMode.HALF_UP);
     }
 }
-

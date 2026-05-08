@@ -20,6 +20,8 @@ CREATE TABLE user (
     salt VARCHAR(64) NOT NULL COMMENT '密码盐',
     role VARCHAR(20) NOT NULL DEFAULT 'USER' COMMENT '角色：ADMIN/USER',
     email VARCHAR(100) COMMENT '邮箱',
+    login_fail_count INT DEFAULT 0 COMMENT '连续登录失败次数',
+    locked_until DATETIME DEFAULT NULL COMMENT '账户锁定截止时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
@@ -104,3 +106,28 @@ CREATE TABLE sys_log (
 
 CREATE INDEX idx_sys_log_created_at ON sys_log(created_at);
 CREATE INDEX idx_sys_log_username ON sys_log(username);
+
+-- 知识库表：存储常见招聘问答对，供本地模型使用
+CREATE TABLE IF NOT EXISTS knowledge_base (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    question VARCHAR(500) NOT NULL COMMENT '问题',
+    answer TEXT NOT NULL COMMENT '回答',
+    tags VARCHAR(500) DEFAULT '' COMMENT '标签，多个用逗号分隔（如：Java,长沙,薪资）',
+    source VARCHAR(50) DEFAULT 'manual' COMMENT '来源：manual=手动添加, zhipu=智谱学习, ollama=本地生成',
+    usage_count INT DEFAULT 0 COMMENT '使用次数',
+    status TINYINT DEFAULT 1 COMMENT '状态：1=启用, 0=禁用',
+    quality_score INT DEFAULT 0 COMMENT '质量评分：0=未评分, 1=低, 2=中, 3=高',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI知识库表';
+
+CREATE INDEX idx_knowledge_tags ON knowledge_base(tags);
+CREATE INDEX idx_knowledge_status ON knowledge_base(status);
+CREATE INDEX idx_knowledge_usage ON knowledge_base(usage_count DESC);
+
+-- 初始化常见招聘问答数据
+INSERT INTO knowledge_base (question, answer, tags, source, quality_score) VALUES
+('长沙Java后端薪资多少', '根据系统数据，长沙Java后端开发薪资范围大致如下：\n- 应届生/1年以下：6-10K\n- 1-3年经验：10-18K\n- 3-5年经验：15-25K\n- 5年以上：20-35K\n\n实际薪资受公司规模、技术栈、城市区域影响较大。建议关注长沙软件园、高新区企业群。', 'Java,长沙,薪资,后端', 'manual', 3),
+('北京Python工程师薪资水平', '北京Python工程师薪资参考：\n- 应届生：10-18K\n- 1-3年：18-30K\n- 3-5年：25-45K\n- 5年以上：35-60K\n\n北京互联网企业集中，薪资普遍高于其他城市，但生活成本也较高。', 'Python,北京,薪资', 'manual', 3),
+('前端开发薪资怎么样', '前端开发薪资因城市和经验差异较大：\n- 初级(1年以下)：5-12K\n- 中级(1-3年)：10-20K\n- 高级(3-5年)：18-30K\n- 资深(5年+)：25-45K\n\n热门框架Vue/React薪资通常比传统前端高20-30%。', '前端,薪资,Vue,React', 'manual', 3),
+('测试工程师工资高吗', '软件测试工程师薪资水平：\n- 功能测试/实习生：5-10K\n- 自动化测试：12-22K\n- 测试开发/架构：20-40K\n- 测试经理：25-50K\n\n建议向自动化测试、性能测试方向发展，薪资提升明显。', '测试,薪资,自动化', 'manual', 3);

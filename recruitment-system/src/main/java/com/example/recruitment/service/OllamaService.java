@@ -37,6 +37,16 @@ public interface OllamaService {
      * @throws Exception 调用失败时抛出异常
      */
     void chatStream(String systemPrompt, String userMessage, SseEmitter emitter) throws Exception;
+    
+    /**
+     * 流式调用Ollama（SSE）- 带响应收集
+     * @param systemPrompt 系统提示词
+     * @param userMessage 用户消息
+     * @param emitter SSE发射器
+     * @param fullResponse 用于收集完整响应的StringBuilder
+     * @throws Exception 调用失败时抛出异常
+     */
+    void chatStream(String systemPrompt, String userMessage, SseEmitter emitter, StringBuilder fullResponse) throws Exception;
 
     /**
      * 获取Ollama服务健康状态描述

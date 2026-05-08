@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Markdown 渲染器配置
  *

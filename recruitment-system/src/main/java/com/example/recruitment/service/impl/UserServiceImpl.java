@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -135,13 +136,107 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("用户不存在");
         }
         
+        return convertToVO(user);
+    }
+    
+    @Override
+    public List<UserVO> listUsers(String username, Integer pageNum, Integer pageSize) {
+        log.debug("查询用户列表: username={}, pageNum={}, pageSize={}", username, pageNum, pageSize);
+        int offset = (pageNum - 1) * pageSize;
+        int limit = pageSize;
+        return userMapper.listUsers(username, offset, limit).stream()
+                .map(this::convertToVO)
+                .toList();
+    }
+    
+    @Override
+    public UserVO getUserById(Long id) {
+        log.debug("根据ID查询用户: id={}", id);
+        User user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        return convertToVO(user);
+    }
+    
+    @Override
+    public void updateUser(Long id, User user) {
+        log.debug("更新用户信息: id={}", id);
+        User existing = userMapper.selectById(id);
+        if (existing == null) {
+            throw new BusinessException("用户不存在");
+        }
+        
+        if (user.getUsername() != null && !user.getUsername().isEmpty()) {
+            existing.setUsername(user.getUsername());
+        }
+        if (user.getEmail() != null && !user.getEmail().isEmpty()) {
+            existing.setEmail(user.getEmail());
+        }
+        if (user.getRole() != null && !user.getRole().isEmpty()) {
+            existing.setRole(user.getRole());
+        }
+        if (user.getSkills() != null) {
+            existing.setSkills(user.getSkills());
+        }
+        if (user.getEducation() != null) {
+            existing.setEducation(user.getEducation());
+        }
+        if (user.getExperienceYears() != null) {
+            existing.setExperienceYears(user.getExperienceYears());
+        }
+        
+        userMapper.update(existing);
+        log.info("用户信息更新成功: id={}, username={}", id, existing.getUsername());
+    }
+    
+    @Override
+    public void deleteUser(Long id) {
+        log.debug("删除用户: id={}", id);
+        User user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        
+        userMapper.deleteById(id);
+        log.info("用户删除成功: id={}, username={}", id, user.getUsername());
+    }
+    
+    @Override
+    public void toggleUserStatus(Long id, boolean enabled) {
+        log.debug("切换用户状态: id={}, enabled={}", id, enabled);
+        User user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        
+        if (!enabled) {
+            user.setLockedUntil(LocalDateTime.now().plusYears(100));
+        } else {
+            user.setLockedUntil(null);
+            user.setLoginFailCount(0);
+        }
+        
+        userMapper.update(user);
+        log.info("用户状态更新成功: id={}, username={}, enabled={}", id, user.getUsername(), enabled);
+    }
+    
+    @Override
+    public long countUsers() {
+        return userMapper.countUsers();
+    }
+    
+    private UserVO convertToVO(User user) {
         UserVO vo = new UserVO();
         vo.setId(user.getId());
         vo.setUsername(user.getUsername());
         vo.setRole(user.getRole());
         vo.setEmail(user.getEmail());
-        
-        log.debug("查询用户信息成功: userId={}, username={}", user.getId(), user.getUsername());
+        vo.setCreatedAt(user.getCreatedAt());
+        vo.setEnabled(user.getLockedUntil() == null || user.getLockedUntil().isBefore(LocalDateTime.now()));
+        vo.setSkills(user.getSkills());
+        vo.setEducation(user.getEducation());
+        vo.setExperienceYears(user.getExperienceYears());
         return vo;
     }
 }

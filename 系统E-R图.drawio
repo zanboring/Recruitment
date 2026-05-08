@@ -1,0 +1,143 @@
+<mxfile host="app.diagrams.net">
+<diagram name="招聘系统E-R图" id="recruitment-er-diagram">
+<mxGraphModel dx="1600" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="800" math="0" shadow="0">
+<root>
+<mxCell id="0" />
+<mxCell id="1" parent="0" />
+
+<mxCell id="user" parent="1" style="shape=rect;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#E8F5E9;strokeColor=#4CAF50;fontColor=#333333;" value="用户" vertex="1">
+<mxGeometry height="50" width="90" x="150" y="350" as="geometry" />
+</mxCell>
+
+<mxCell id="company" parent="1" style="shape=rect;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#E3F2FD;strokeColor=#2196F3;fontColor=#333333;" value="企业" vertex="1">
+<mxGeometry height="50" width="90" x="400" y="150" as="geometry" />
+</mxCell>
+
+<mxCell id="job" parent="1" style="shape=rect;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#FFF3E0;strokeColor=#FF9800;fontColor=#333333;" value="岗位" vertex="1">
+<mxGeometry height="50" width="90" x="700" y="350" as="geometry" />
+</mxCell>
+
+<mxCell id="crawl_task" parent="1" style="shape=rect;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#E0F7FA;strokeColor=#00ACC1;fontColor=#333333;" value="爬虫任务" vertex="1">
+<mxGeometry height="50" width="90" x="1000" y="150" as="geometry" />
+</mxCell>
+
+<mxCell id="sys_log" parent="1" style="shape=rect;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#FFEBEE;strokeColor=#E53935;fontColor=#333333;" value="系统日志" vertex="1">
+<mxGeometry height="50" width="90" x="1250" y="350" as="geometry" />
+</mxCell>
+
+<mxCell id="knowledge" parent="1" style="shape=rect;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#F3E5F5;strokeColor=#9C27B0;fontColor=#333333;" value="知识库" vertex="1">
+<mxGeometry height="50" width="90" x="550" y="550" as="geometry" />
+</mxCell>
+
+<mxCell id="rel_search" parent="1" style="shape=rhombus;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#FFD93D;strokeColor=#FF9500;fontColor=#333333;" value="搜索" vertex="1">
+<mxGeometry height="40" width="60" x="270" y="350" as="geometry" />
+</mxCell>
+
+<mxCell id="rel_publish" parent="1" style="shape=rhombus;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#FFD93D;strokeColor=#FF9500;fontColor=#333333;" value="发布" vertex="1">
+<mxGeometry height="40" width="60" x="550" y="150" as="geometry" />
+</mxCell>
+
+<mxCell id="rel_crawl" parent="1" style="shape=rhombus;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#FFD93D;strokeColor=#FF9500;fontColor=#333333;" value="抓取" vertex="1">
+<mxGeometry height="40" width="60" x="850" y="150" as="geometry" />
+</mxCell>
+
+<mxCell id="rel_record" parent="1" style="shape=rhombus;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#FFD93D;strokeColor=#FF9500;fontColor=#333333;" value="记录" vertex="1">
+<mxGeometry height="40" width="60" x="1120" y="350" as="geometry" />
+</mxCell>
+
+<mxCell id="rel_use" parent="1" style="shape=rhombus;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fillColor=#FFD93D;strokeColor=#FF9500;fontColor=#333333;" value="使用" vertex="1">
+<mxGeometry height="40" width="60" x="320" y="550" as="geometry" />
+</mxCell>
+
+<mxCell id="e_user_search" edge="1" parent="1" source="user" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="rel_search">
+<mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="l_user_search" connectable="0" parent="e_user_search" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="1" vertex="1">
+<mxGeometry relative="1" x="-0.2" as="geometry" />
+</mxCell>
+
+<mxCell id="e_search_job" edge="1" parent="1" source="rel_search" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="job">
+<mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="l_search_job" connectable="0" parent="e_search_job" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="N" vertex="1">
+<mxGeometry relative="1" x="-0.1" as="geometry" />
+</mxCell>
+
+<mxCell id="e_company_publish" edge="1" parent="1" source="company" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="rel_publish">
+<mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="l_company_publish" connectable="0" parent="e_company_publish" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="1" vertex="1">
+<mxGeometry relative="1" x="-0.2" as="geometry" />
+</mxCell>
+
+<mxCell id="e_publish_job" edge="1" parent="1" source="rel_publish" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="job">
+<mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="l_publish_job" connectable="0" parent="e_publish_job" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="N" vertex="1">
+<mxGeometry relative="1" x="-0.1" as="geometry" />
+</mxCell>
+
+<mxCell id="e_crawl_crawl" edge="1" parent="1" source="crawl_task" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="rel_crawl">
+<mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="l_crawl_crawl" connectable="0" parent="e_crawl_crawl" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="1" vertex="1">
+<mxGeometry relative="1" x="-0.2" as="geometry" />
+</mxCell>
+
+<mxCell id="e_crawl_job" edge="1" parent="1" source="rel_crawl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="job">
+<mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="l_crawl_job" connectable="0" parent="e_crawl_job" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="N" vertex="1">
+<mxGeometry relative="1" x="-0.1" as="geometry" />
+</mxCell>
+
+<mxCell id="e_job_record" edge="1" parent="1" source="job" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="rel_record">
+<mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="l_job_record" connectable="0" parent="e_job_record" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="N" vertex="1">
+<mxGeometry relative="1" x="-0.2" as="geometry" />
+</mxCell>
+
+<mxCell id="e_record_log" edge="1" parent="1" source="rel_record" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="sys_log">
+<mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="l_record_log" connectable="0" parent="e_record_log" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="N" vertex="1">
+<mxGeometry relative="1" x="-0.1" as="geometry" />
+</mxCell>
+
+<mxCell id="e_user_use" edge="1" parent="1" source="user" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="rel_use">
+<mxGeometry relative="1" as="geometry">
+<Array as="points">
+<mxPoint x="195" y="470" />
+</Array>
+</mxGeometry>
+</mxCell>
+<mxCell id="l_user_use" connectable="0" parent="e_user_use" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="1" vertex="1">
+<mxGeometry relative="1" x="-0.2" as="geometry" />
+</mxCell>
+
+<mxCell id="e_use_knowledge" edge="1" parent="1" source="rel_use" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;" target="knowledge">
+<mxGeometry relative="1" as="geometry" />
+</mxCell>
+<mxCell id="l_use_knowledge" connectable="0" parent="e_use_knowledge" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="N" vertex="1">
+<mxGeometry relative="1" x="-0.1" as="geometry" />
+</mxCell>
+
+<mxCell id="e_company_job" edge="1" parent="1" source="company" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#666666;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="job">
+<mxGeometry relative="1" as="geometry">
+<Array as="points">
+<mxPoint x="445" y="270" />
+</Array>
+</mxGeometry>
+</mxCell>
+<mxCell id="l_company_job_1" connectable="0" parent="e_company_job" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="1" vertex="1">
+<mxGeometry relative="1" x="-0.8" as="geometry" />
+</mxCell>
+<mxCell id="l_company_job_n" connectable="0" parent="e_company_job" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=#ffffff;" value="N" vertex="1">
+<mxGeometry relative="1" x="0.8" as="geometry" />
+</mxCell>
+
+</root>
+</mxGraphModel>
+</diagram>
+</mxfile>

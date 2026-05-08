@@ -29,3 +29,7 @@ export function startCrawlTask(id: number): Promise<void> {
 export function fetchCrawlTasks(): Promise<CrawlTask[]> {
   return http.get('/crawl/tasks');
 }
+
+export function deleteCrawlTask(id: number): Promise<void> {
+  return http.delete(`/crawl/task/${id}`);
+}

@@ -1,5 +1,6 @@
 package com.example.recruitment.controller;
 
+import com.example.recruitment.annotation.Log;
 import com.example.recruitment.common.Result;
 import com.example.recruitment.entity.KnowledgeBase;
 import com.example.recruitment.service.KnowledgeBaseService;
@@ -81,6 +82,7 @@ public class KnowledgeBaseController {
      */
     @PostMapping
     @Operation(summary = "添加知识库", description = "添加新的知识库记录")
+    @Log("添加知识库")
     public Result<KnowledgeBase> add(@RequestBody KnowledgeBase knowledgeBase) {
         if (knowledgeBase.getQuestion() == null || knowledgeBase.getQuestion().trim().isEmpty()) {
             return Result.failed("问题不能为空");
@@ -97,6 +99,7 @@ public class KnowledgeBaseController {
      */
     @PutMapping("/{id}")
     @Operation(summary = "更新知识库", description = "更新知识库记录")
+    @Log("更新知识库")
     public Result<Void> update(@PathVariable Long id, @RequestBody KnowledgeBase knowledgeBase) {
         knowledgeBase.setId(id);
         boolean success = knowledgeBaseService.update(knowledgeBase);
@@ -111,6 +114,7 @@ public class KnowledgeBaseController {
      */
     @DeleteMapping("/{id}")
     @Operation(summary = "删除知识库", description = "删除知识库记录")
+    @Log("删除知识库")
     public Result<Void> delete(@PathVariable Long id) {
         boolean success = knowledgeBaseService.delete(id);
         if (!success) {
@@ -160,6 +164,7 @@ public class KnowledgeBaseController {
      */
     @PostMapping("/learn")
     @Operation(summary = "学习问答", description = "保存智谱AI的优质回答到本地知识库")
+    @Log("知识库学习")
     public Result<KnowledgeBase> learn(@RequestBody LearnRequest request) {
         if (request.getQuestion() == null || request.getQuestion().trim().isEmpty()) {
             return Result.failed("问题不能为空");

@@ -44,7 +44,7 @@ const ensureAutoLogin = async () => {
 
   if (!autoLoginPromise) {
     autoLoginPromise = (async () => {
-      const user = await instance.post('/auth/auto-login', {}, { __skipAutoLoginRetry: true } as any);
+      const user = await instance.post('/auth/auto-login', {}, { __skipAutoLoginRetry: true } as any) as any;
       userStore.setUser(user);
     })().catch((e) => {
       autoLoginPromise = null;
@@ -159,5 +159,36 @@ instance.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export function createSseRequest(url: string, data: Record<string, any>): EventSource {
+  const userStore = useUserStore();
+  const params = new URLSearchParams();
+  Object.keys(data).forEach(key => {
+    params.append(key, String(data[key]));
+  });
+  
+  const fullUrl = url + (url.includes('?') ? '&' : '?') + params.toString();
+  
+  const eventSource = new EventSource(fullUrl, {
+    headers: {
+      'Authorization': `Bearer ${userStore.token}`,
+      'Accept': 'text/event-stream'
+    }
+  } as EventSourceInit);
+  
+  return eventSource;
+}
+
+export function createSseFetch(url: string, data: Record<string, any>): Promise<Response> {
+  const userStore = useUserStore();
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json;charset=UTF-8',
+      'Authorization': `Bearer ${userStore.token}`
+    },
+    body: JSON.stringify(data)
+  });
+}
 
 export default instance;

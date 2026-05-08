@@ -1,5 +1,6 @@
 package com.example.recruitment.service;
 
+import com.example.recruitment.service.impl.DataServiceImpl;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -10,5 +11,7 @@ public interface DataService {
     void exportJobs(HttpServletResponse response, Integer limit);
 
     int cleanupAllData();
+
+    DataServiceImpl.DataCleanupResult cleanAndStandardizeData();
 }
 

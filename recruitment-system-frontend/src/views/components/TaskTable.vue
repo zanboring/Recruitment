@@ -73,6 +73,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { List } from '@element-plus/icons-vue';
 import http from '@/api/http';
+import { deleteCrawlTask } from '@/api/crawl';
 
 interface Task {
   id: number;
@@ -144,7 +145,7 @@ const handleDeleteTask = async (task: Task) => {
       }
     );
     
-    await http.post(`/crawl/task/${task.id}/delete`);
+    await deleteCrawlTask(task.id);
     ElMessage.success('任务已删除');
     emit('loadData');
   } catch (error: any) {

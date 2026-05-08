@@ -22,8 +22,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.annotation.PreDestroy;
 
@@ -39,6 +42,15 @@ public class AIController {
     private final JobService jobService;
     private final KnowledgeBaseService knowledgeBaseService;
     private final ExecutorService executor = Executors.newFixedThreadPool(10);
+    
+    private final Map<String, SseEmitter> activeEmitters = new ConcurrentHashMap<>();
+
+    // ========== 统计信息缓存（5分钟有效）==========
+    private static final long CACHE_TTL_MS = 5 * 60 * 1000L;
+    private volatile String cachedStatsContext = null;
+    private volatile long cachedStatsTime = 0;
+    private final AtomicLong cacheHitCount = new AtomicLong(0);
+    private final AtomicLong cacheMissCount = new AtomicLong(0);
 
     private static final String SYSTEM_PROMPT_ZHIPU =
             "你是\"招聘数据分析助手\"，一个专注于互联网招聘市场数据分析和求职建议的AI专家。\n" +
@@ -94,103 +106,147 @@ public class AIController {
             "5. 引导使用主API：复杂问题建议切换到主API\n" +
             "";
 
+    /**
+     * 构建增强消息（带缓存优化）
+     * 统计信息缓存5分钟，知识库上下文实时查询
+     */
     private String buildEnhancedMessage(String userMessage) {
         try {
             StringBuilder context = new StringBuilder();
 
-            // 1. 先添加知识库上下文
+            // 1. 先添加知识库上下文（实时查询，因为每个问题不同）
             String knowledgeContext = knowledgeBaseService.getContextForAI(userMessage);
             if (!knowledgeContext.isEmpty()) {
                 context.append(knowledgeContext);
             }
 
-            // 2. 添加数据库统计信息
-            context.append("\n\n【当前数据库统计信息（实时）】\n");
+            // 2. 添加数据库统计信息（使用缓存，5分钟内不重复查询）
+            context.append(getCachedStatsContext());
+
+            return userMessage + context.toString();
+
+        } catch (Exception e) {
+            log.warn("构建数据库上下文失败，使用原始消息: {}", e.getMessage());
+            return userMessage;
+        }
+    }
+
+    /**
+     * 获取缓存的统计信息上下文
+     * 缓存有效期5分钟，避免每次都查询数据库
+     */
+    private String getCachedStatsContext() {
+        long now = System.currentTimeMillis();
+
+        // 检查缓存是否有效
+        if (cachedStatsContext != null && (now - cachedStatsTime) < CACHE_TTL_MS) {
+            cacheHitCount.incrementAndGet();
+            if (cacheHitCount.get() % 10 == 0) {
+                log.info("统计缓存命中，当前缓存已使用{}次", cacheHitCount.get());
+            }
+            return cachedStatsContext;
+        }
+
+        // 缓存过期或为空，重新查询
+        cacheMissCount.incrementAndGet();
+        log.info("统计缓存未命中/已过期，重新查询数据库（未命中次数: {}）", cacheMissCount.get());
+
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append("\n\n【当前数据库统计信息（实时）】\n");
 
             List<JobStatVO> cityStats = jobService.statByCity();
             if (!cityStats.isEmpty()) {
-                context.append("📍 热门城市TOP5: ");
+                sb.append("📍 热门城市TOP5: ");
                 for (int i = 0; i < Math.min(5, cityStats.size()); i++) {
                     JobStatVO c = cityStats.get(i);
-                    context.append(c.getName()).append("(").append(c.getCount()).append("个岗位");
+                    sb.append(c.getName()).append("(").append(c.getCount()).append("个岗位");
                     if (c.getAvgSalary() != null) {
-                        context.append(",均薪").append(String.format("%.0f元", c.getAvgSalary()));
+                        sb.append(",均薪").append(String.format("%.0f元", c.getAvgSalary()));
                     }
-                    context.append(")");
-                    if (i < Math.min(5, cityStats.size()) - 1) context.append("、");
+                    sb.append(")");
+                    if (i < Math.min(5, cityStats.size()) - 1) sb.append("、");
                 }
-                context.append("\n");
+                sb.append("\n");
             }
 
             List<JobStatVO> skillStats = jobService.statBySkill();
             if (!skillStats.isEmpty()) {
-                context.append("💻 热门技能TOP8: ");
+                sb.append("💻 热门技能TOP8: ");
                 for (int i = 0; i < Math.min(8, skillStats.size()); i++) {
                     JobStatVO s = skillStats.get(i);
-                    context.append(s.getName()).append("(").append(s.getCount()).append(")");
-                    if (i < Math.min(8, skillStats.size()) - 1) context.append("、");
+                    sb.append(s.getName()).append("(").append(s.getCount()).append(")");
+                    if (i < Math.min(8, skillStats.size()) - 1) sb.append("、");
                 }
-                context.append("\n");
+                sb.append("\n");
             }
 
             List<JobStatVO> salaryStats = jobService.statBySalaryRange();
             if (!salaryStats.isEmpty()) {
-                context.append("💰 薪资分布: ");
+                sb.append("💰 薪资分布: ");
                 for (JobStatVO s : salaryStats) {
-                    context.append(s.getName()).append(":").append(s.getCount()).append("个  ");
+                    sb.append(s.getName()).append(":").append(s.getCount()).append("个  ");
                 }
-                context.append("\n");
+                sb.append("\n");
             }
 
             List<JobStatVO> eduStats = jobService.statByEducation();
             if (!eduStats.isEmpty()) {
-                context.append("🎓 学历要求: ");
+                sb.append("🎓 学历要求: ");
                 for (JobStatVO e : eduStats) {
-                    context.append(e.getName()).append("(").append(e.getCount()).append(") ");
+                    sb.append(e.getName()).append("(").append(e.getCount()).append(") ");
                 }
-                context.append("\n");
+                sb.append("\n");
             }
 
             List<JobStatVO> expStats = jobService.statByExperience();
             if (!expStats.isEmpty()) {
-                context.append("📊 经验要求: ");
+                sb.append("📊 经验要求: ");
                 for (JobStatVO e : expStats) {
-                    context.append(e.getName()).append("(").append(e.getCount()).append(") ");
+                    sb.append(e.getName()).append("(").append(e.getCount()).append(") ");
                 }
-                context.append("\n");
+                sb.append("\n");
             }
 
             JobTrendVO trend = jobService.jobTrendLast7Days();
             if (trend != null) {
                 long last7 = trend.getLast7Days() != null ? trend.getLast7Days() : 0;
                 long prev7 = trend.getPrev7Days() != null ? trend.getPrev7Days() : 0;
-                context.append("📈 近期趋势: 最近7天新增").append(last7)
+                sb.append("📈 近期趋势: 最近7天新增").append(last7)
                        .append("个岗位, 前7天新增").append(prev7).append("个岗位");
                 if (prev7 > 0) {
                     double ratio = (double) last7 / prev7;
-                    if (ratio >= 1.15) context.append("(↑上升)");
-                    else if (ratio <= 0.85) context.append("(↓回落)");
-                    else context.append("(→平稳)");
+                    if (ratio >= 1.15) sb.append("(↑上升)");
+                    else if (ratio <= 0.85) sb.append("(↓回落)");
+                    else sb.append("(→平稳)");
                 }
-                context.append("\n");
+                sb.append("\n");
             }
 
             List<JobStatVO> titleStats = jobService.statTopTitles();
             if (!titleStats.isEmpty()) {
-                context.append("🔥 热门岗位TOP5: ");
+                sb.append("🔥 热门岗位TOP5: ");
                 for (int i = 0; i < Math.min(5, titleStats.size()); i++) {
-                    context.append(titleStats.get(i).getName());
-                    if (i < Math.min(5, titleStats.size()) - 1) context.append("、");
+                    sb.append(titleStats.get(i).getName());
+                    if (i < Math.min(5, titleStats.size()) - 1) sb.append("、");
                 }
-                context.append("\n");
+                sb.append("\n");
             }
 
-            context.append("【以上数据来自系统数据库，请在回答中参考这些真实数据】\n");
-            return userMessage + context.toString();
+            sb.append("【以上数据来自系统数据库，请在回答中参考这些真实数据】\n");
+
+            // 更新缓存
+            cachedStatsContext = sb.toString();
+            cachedStatsTime = now;
+
+            log.info("统计信息已缓存，下次请求将直接使用缓存（缓存有效期5分钟）");
+
+            return cachedStatsContext;
 
         } catch (Exception e) {
-            log.warn("构建数据库上下文失败，使用原始消息: {}", e.getMessage());
-            return userMessage;
+            log.warn("获取统计信息失败: {}", e.getMessage());
+            // 如果获取失败，返回空字符串，不阻塞聊天
+            return "\n\n【当前数据库统计信息暂不可用】\n";
         }
     }
 
@@ -291,7 +347,20 @@ public class AIController {
     @PostMapping("/stream")
     @Operation(summary = "AI流式聊天", description = "统一入口，支持智能路由选择AI服务")
     public SseEmitter streamChat(@RequestBody AIChatRequest request) {
+        String requestId = UUID.randomUUID().toString();
         SseEmitter emitter = new SseEmitter(120000L);
+        
+        activeEmitters.put(requestId, emitter);
+        
+        emitter.onCompletion(() -> {
+            activeEmitters.remove(requestId);
+        });
+        emitter.onTimeout(() -> {
+            activeEmitters.remove(requestId);
+        });
+        emitter.onError(e -> {
+            activeEmitters.remove(requestId);
+        });
 
         executor.execute(() -> {
             try {
@@ -300,15 +369,18 @@ public class AIController {
                 boolean ollamaAvailable = ollamaService.isAvailable();
                 boolean zhipuAvailable = aiService.isApiKeyConfigured();
 
-                log.info("流式聊天请求 - 消息: {}, useLocalModel: {}, ollama可用: {}, 智谱可用: {}", 
-                    message, useLocal, ollamaAvailable, zhipuAvailable);
+                log.info("流式聊天请求 - requestId: {}, 消息: {}, useLocalModel: {}, ollama可用: {}, 智谱可用: {}", 
+                    requestId, message, useLocal, ollamaAvailable, zhipuAvailable);
+
+                StringBuilder fullResponse = new StringBuilder();
+                boolean usedZhipu = false;
 
                 if (useLocal == null) {
                     if (ollamaAvailable) {
                         try {
                             emitter.send(SseEmitter.event().data("[模型] 使用本地大模型 (Ollama)\n\n"));
                             String enhancedMessage = buildEnhancedMessage(message);
-                            ollamaService.chatStream(SYSTEM_PROMPT_OLLAMA, enhancedMessage, emitter);
+                            ollamaService.chatStream(SYSTEM_PROMPT_OLLAMA, enhancedMessage, emitter, fullResponse);
                             emitter.complete();
                             return;
                         } catch (Exception e) {
@@ -316,8 +388,10 @@ public class AIController {
                             if (zhipuAvailable) {
                                 emitter.send(SseEmitter.event().data("[切换] 本地模型响应失败，已切换到主API\n\n"));
                                 String enhancedMessage = buildEnhancedMessage(message);
-                                aiService.chatStream(SYSTEM_PROMPT_ZHIPU, enhancedMessage, emitter);
+                                aiService.chatStream(SYSTEM_PROMPT_ZHIPU, enhancedMessage, emitter, fullResponse);
+                                usedZhipu = true;
                                 emitter.complete();
+                                saveToKnowledgeBase(message, fullResponse.toString());
                                 return;
                             }
                         }
@@ -328,8 +402,10 @@ public class AIController {
                             emitter.send(SseEmitter.event().data("[模型] 本地模型未运行，使用主API\n\n"));
                         }
                         String enhancedMessage = buildEnhancedMessage(message);
-                        aiService.chatStream(SYSTEM_PROMPT_ZHIPU, enhancedMessage, emitter);
+                        aiService.chatStream(SYSTEM_PROMPT_ZHIPU, enhancedMessage, emitter, fullResponse);
+                        usedZhipu = true;
                         emitter.complete();
+                        saveToKnowledgeBase(message, fullResponse.toString());
                         return;
                     }
                     
@@ -344,7 +420,7 @@ public class AIController {
                     }
                     emitter.send(SseEmitter.event().data("[模型] 使用本地大模型 (Ollama)\n\n"));
                     String enhancedMessage = buildEnhancedMessage(message);
-                    ollamaService.chatStream(SYSTEM_PROMPT_OLLAMA, enhancedMessage, emitter);
+                    ollamaService.chatStream(SYSTEM_PROMPT_OLLAMA, enhancedMessage, emitter, fullResponse);
                     emitter.complete();
                     
                 } else {
@@ -355,8 +431,10 @@ public class AIController {
                     }
                     emitter.send(SseEmitter.event().data("[模型] 使用智谱API (GLM-4)\n\n"));
                     String enhancedMessage = buildEnhancedMessage(message);
-                    aiService.chatStream(SYSTEM_PROMPT_ZHIPU, enhancedMessage, emitter);
+                    aiService.chatStream(SYSTEM_PROMPT_ZHIPU, enhancedMessage, emitter, fullResponse);
+                    usedZhipu = true;
                     emitter.complete();
+                    saveToKnowledgeBase(message, fullResponse.toString());
                 }
 
             } catch (Exception e) {
@@ -369,6 +447,49 @@ public class AIController {
         });
 
         return emitter;
+    }
+    
+    @PostMapping("/cancel")
+    @Operation(summary = "取消AI聊天", description = "取消正在进行的AI聊天请求")
+    public Result<Void> cancelChat(@RequestBody Map<String, String> request) {
+        String requestId = request.get("requestId");
+        if (requestId == null || requestId.isEmpty()) {
+            return Result.failed("requestId不能为空");
+        }
+        
+        SseEmitter emitter = activeEmitters.remove(requestId);
+        if (emitter != null) {
+            try {
+                emitter.complete();
+                log.info("已取消聊天请求: {}", requestId);
+            } catch (Exception e) {
+                log.warn("取消聊天请求失败: {}", e.getMessage());
+            }
+            return Result.success();
+        } else {
+            return Result.failed("未找到正在进行的聊天请求");
+        }
+    }
+    
+    private void saveToKnowledgeBase(String question, String answer) {
+        try {
+            if (question == null || answer == null || question.trim().isEmpty() || answer.trim().isEmpty()) {
+                return;
+            }
+            
+            KnowledgeBase kb = new KnowledgeBase();
+            kb.setQuestion(question.length() > 100 ? question.substring(0, 100) : question);
+            kb.setAnswer(answer);
+            kb.setSource("AI_CHAT");
+            kb.setTags("招聘分析");
+            kb.setStatus(1);
+            kb.setUsageCount(0);
+            knowledgeBaseService.add(kb);
+            
+            log.info("已保存AI回答到知识库: {}", kb.getQuestion());
+        } catch (Exception e) {
+            log.warn("保存到知识库失败: {}", e.getMessage());
+        }
     }
 
     public static class AIChatRequest {

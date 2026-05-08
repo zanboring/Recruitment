@@ -1,0 +1,127 @@
+<mxfile host="65bd71c2-2e6c-11ef-b5e5-3f1d7ca53890">
+<diagram id="ER_Diagram" name="招聘系统E-R图">
+<mxGraphModel dx="1426" dy="753" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+<root>
+<mxCell id="0"/>
+<mxCell id="1" parent="0"/>
+
+<mxCell id="entity_user" value="用户" style="rounded=0;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="300" y="400" width="120" height="60" as="geometry"/>
+</mxCell>
+
+<mxCell id="entity_company" value="企业" style="rounded=0;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="300" y="100" width="120" height="60" as="geometry"/>
+</mxCell>
+
+<mxCell id="entity_job" value="岗位" style="rounded=0;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="600" y="100" width="120" height="60" as="geometry"/>
+</mxCell>
+
+<mxCell id="entity_resume" value="简历" style="rounded=0;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="80" y="400" width="120" height="60" as="geometry"/>
+</mxCell>
+
+<mxCell id="entity_application" value="岗位申请" style="rounded=0;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="500" y="400" width="120" height="60" as="geometry"/>
+</mxCell>
+
+<mxCell id="entity_favorite" value="岗位收藏" style="rounded=0;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="700" y="400" width="120" height="60" as="geometry"/>
+</mxCell>
+
+<mxCell id="entity_crawl" value="爬虫任务" style="rounded=0;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="500" y="550" width="120" height="60" as="geometry"/>
+</mxCell>
+
+<mxCell id="entity_log" value="系统日志" style="rounded=0;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="700" y="550" width="120" height="60" as="geometry"/>
+</mxCell>
+
+<mxCell id="rel_own" value="拥有" style="rounded=1;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="200" y="400" width="60" height="40" as="geometry"/>
+</mxCell>
+
+<mxCell id="rel_publish" value="发布" style="rounded=1;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="420" y="100" width="60" height="40" as="geometry"/>
+</mxCell>
+
+<mxCell id="rel_apply" value="申请" style="rounded=1;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="420" y="400" width="60" height="40" as="geometry"/>
+</mxCell>
+
+<mxCell id="rel_favorite" value="收藏" style="rounded=1;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="620" y="400" width="60" height="40" as="geometry"/>
+</mxCell>
+
+<mxCell id="rel_belong" value="属于" style="rounded=1;whiteSpace=wrap;html=1;aspect=fixed;" parent="1" vertex="1">
+<mxGeometry x="420" y="400" width="60" height="40" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_user_own" style="edgeStyle=none;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" parent="1" source="entity_user" target="rel_own" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_own_resume" style="edgeStyle=none;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" parent="1" source="rel_own" target="entity_resume" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_company_publish" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" parent="1" source="entity_company" target="rel_publish" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_publish_job" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" parent="1" source="rel_publish" target="entity_job" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_user_apply" style="edgeStyle=none;html=1;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" parent="1" source="entity_user" target="rel_apply" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_apply_application" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" parent="1" source="rel_apply" target="entity_application" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_user_favorite" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" parent="1" source="entity_user" target="rel_favorite" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_favorite_favorite" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" parent="1" source="rel_favorite" target="entity_favorite" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_job_belong" style="edgeStyle=none;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" parent="1" source="entity_job" target="rel_belong" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="conn_belong_application" style="edgeStyle=none;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" parent="1" source="rel_belong" target="entity_application" edge="1">
+<mxGeometry relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="label_user_own_n" value="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" parent="conn_user_own" vertex="1">
+<mxGeometry x="-20" y="0" relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="label_own_resume_n" value="N" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" parent="conn_own_resume" vertex="1">
+<mxGeometry x="-20" y="0" relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="label_company_publish_1" value="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" parent="conn_company_publish" vertex="1">
+<mxGeometry x="-20" y="0" relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="label_publish_job_n" value="N" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" parent="conn_publish_job" vertex="1">
+<mxGeometry x="-20" y="0" relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="label_user_apply_1" value="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" parent="conn_user_apply" vertex="1">
+<mxGeometry x="0" y="-20" relative="1" as="geometry"/>
+</mxCell>
+
+<mxCell id="label_apply_application_n" value="N" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" parent="conn_apply_application" vertex="1">
+<mxGeometry x="-20" y="0" relative="1" as="geometry"/>
+</mxCell>
+
+</root>
+</mxGraphModel>
+</diagram>
+</mxfile>

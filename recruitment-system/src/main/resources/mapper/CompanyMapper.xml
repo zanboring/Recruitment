@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.recruitment.mapper.CompanyMapper">
+
+    <resultMap id="CompanyResultMap" type="com.example.recruitment.entity.Company">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="industry" property="industry"/>
+        <result column="city" property="city"/>
+        <result column="address" property="address"/>
+        <result column="size" property="size"/>
+        <result column="website" property="website"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.example.recruitment.entity.Company" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO company (name, industry, city, address, size, website, created_at)
+        VALUES (#{name}, #{industry}, #{city}, #{address}, #{size}, #{website}, #{createdAt})
+    </insert>
+
+    <update id="update" parameterType="com.example.recruitment.entity.Company">
+        UPDATE company
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="industry != null">industry = #{industry},</if>
+            <if test="city != null">city = #{city},</if>
+            <if test="address != null">address = #{address},</if>
+            <if test="size != null">size = #{size},</if>
+            <if test="website != null">website = #{website},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById" parameterType="long">
+        DELETE FROM company WHERE id = #{id}
+    </delete>
+
+    <select id="selectById" parameterType="long" resultMap="CompanyResultMap">
+        SELECT * FROM company WHERE id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="CompanyResultMap">
+        SELECT * FROM company ORDER BY created_at DESC
+    </select>
+
+</mapper>

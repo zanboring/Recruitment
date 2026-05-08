@@ -1,5 +1,6 @@
 package com.example.recruitment.controller;
 
+import com.example.recruitment.annotation.Log;
 import com.example.recruitment.common.Result;
 import com.example.recruitment.dto.JobQueryDTO;
 import com.example.recruitment.dto.JobRecommendDTO;
@@ -40,6 +41,7 @@ public class JobController {
     @PostMapping
     @Operation(summary = "新增岗位", description = "添加新的岗位信息")
     @PreAuthorize("hasAuthority('job:write') or hasRole('ADMIN')")
+    @Log("新增岗位")
     public Result<Void> add(@RequestBody Job job) {
         log.info("新增岗位: title={}, company={}", job.getTitle(), job.getCompanyName());
         jobService.addJob(job);
@@ -49,6 +51,7 @@ public class JobController {
     @PutMapping
     @Operation(summary = "更新岗位", description = "更新岗位信息")
     @PreAuthorize("hasAuthority('job:write') or hasRole('ADMIN')")
+    @Log("更新岗位")
     public Result<Void> update(@RequestBody Job job) {
         log.info("更新岗位: id={}, title={}", job.getId(), job.getTitle());
         jobService.updateJob(job);
@@ -58,10 +61,21 @@ public class JobController {
     @DeleteMapping("/{id}")
     @Operation(summary = "删除岗位", description = "根据ID删除岗位")
     @PreAuthorize("hasAuthority('job:delete') or hasRole('ADMIN')")
+    @Log("删除岗位")
     public Result<Void> delete(@PathVariable Long id) {
         log.info("删除岗位: id={}", id);
         jobService.deleteJob(id);
         return Result.success();
+    }
+
+    @DeleteMapping("/batch")
+    @Operation(summary = "批量删除岗位", description = "根据ID列表批量删除岗位")
+    @PreAuthorize("hasAuthority('job:delete') or hasRole('ADMIN')")
+    @Log("批量删除岗位")
+    public Result<Integer> batchDelete(@RequestBody List<Long> ids) {
+        log.info("批量删除岗位: ids={}", ids);
+        int count = jobService.batchDeleteJobs(ids);
+        return Result.success(count);
     }
 
     @GetMapping("/{id}")
@@ -131,11 +145,13 @@ public class JobController {
     }
 
     @GetMapping("/recommend")
-    @Operation(summary = "岗位推荐", description = "根据技能和城市推荐岗位（基础版）")
+    @Operation(summary = "岗位推荐", description = "根据技能、学历、工作经验和城市推荐岗位")
     public Result<List<Job>> recommend(@RequestParam(required = false) String skills,
+                                       @RequestParam(required = false) String education,
+                                       @RequestParam(required = false) Integer experience,
                                        @RequestParam(required = false) String city) {
-        log.info("岗位推荐: skills={}, city={}", skills, city);
-        return Result.success(jobService.recommendJobs(skills, city));
+        log.info("岗位推荐: skills={}, education={}, experience={}, city={}", skills, education, experience, city);
+        return Result.success(jobService.recommendJobs(skills, education, experience, city));
     }
 
     @PostMapping("/recommend/intelligent")

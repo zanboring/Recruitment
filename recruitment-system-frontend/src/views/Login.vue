@@ -81,7 +81,7 @@
             <el-input
               v-model="registerForm.password"
               type="password"
-              placeholder="请输入密码（至少6位）"
+              placeholder="密码长度6到32位"
               size="large"
               show-password
               :prefix-icon="Lock"
@@ -185,7 +185,7 @@ const registerRules: FormRules = {
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少6个字符', trigger: 'blur' }
+    { min: 6, max: 32, message: '密码长度为6-32位', trigger: 'blur' }
   ],
   confirmPassword: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
