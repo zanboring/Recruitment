@@ -49,3 +49,10 @@ add_detail_html_column.sql
 方案A执行步骤.md
 
 
+
+# AI 工具残留与私人工作日志（防止再次提交）
+.cowork-temp/
+.workbuddy/
+.openclaw/
+.trae/
+*.pdf
