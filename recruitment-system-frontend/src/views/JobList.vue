@@ -93,6 +93,7 @@ import AIAnalysisDialog from './components/AIAnalysisDialog.vue';
 import SalaryPredictDialog from './components/SalaryPredictDialog.vue';
 import RecommendDialog from './components/RecommendDialog.vue';
 import { ElMessage } from 'element-plus';
+import { isPreciseJobSourceUrl } from '@/utils/jobSourceUrl';
 
 const loading = ref(false);
 const list = ref<any[]>([]);
@@ -307,99 +308,24 @@ const doRecommend = async ({ skills, education, experience, city }: { skills?: s
 
 onMounted(() => { loadData(); });
 
-/** 构建招聘网站搜索链接（带城市精准搜索）
- * 【方案C增量】备用/兜底搜索链接使用城市+关键词精准匹配
- */
-const buildSearchUrl = (job: any) => {
-  const keyword = encodeURIComponent(job.title || '');
-  const city = encodeURIComponent(job.city || '');
-  const company = encodeURIComponent(job.companyName || '');
-  // 城市中文名 → BOSS直聘城市代码（与后端 getCityCode 保持一致）
-  const cityCodeMap: Record<string, string> = {
-    '北京': '101010100', '上海': '101020100', '广州': '101280100', '深圳': '101280600',
-    '杭州': '101210100', '南京': '101190100', '成都': '101270100', '武汉': '101200100',
-    '西安': '101110100', '苏州': '101190400', '重庆': '101040100', '天津': '101030100',
-    '长沙': '101250100', '郑州': '101180100', '东莞': '101280500', '合肥': '101220100',
-    '青岛': '101120200', '沈阳': '101070100', '大连': '101070200', '厦门': '101230200',
-    '无锡': '101190500', '佛山': '101280800', '宁波': '101210400', '昆明': '101290100',
-    '济南': '101120100', '哈尔滨': '101050100', '石家庄': '101090100', '南宁': '101300100',
-    '常州': '101190600', '泉州': '101230400', '长春': '101060100', '温州': '101210300',
-    '烟台': '101120300', '唐山': '101090200', '嘉兴': '101210500', '惠州': '101280300'
-  };
-  const cityCode = cityCodeMap[job.city] || '101010100';
-
-  const searchUrls: Record<string, string> = {
-    // 【方案C】BOSS直聘列表页：/web/geek/jobs 支持 city(6位城市代码) + query(关键词) + company(公司名)
-    'BOSS直聘': `https://www.zhipin.com/web/geek/jobs?query=${keyword}&city=${cityCode}&company=${company}`,
-    // 智联招聘搜索页：jl=城市编码（支持中文名），kw=关键词
-    '智联招聘': `https://sou.zhaopin.com/?jl=${city}&kw=${keyword}&company=${company}`,
-    // 前程无忧搜索页
-    '前程无忧': `https://we.51job.com/pc/search?keyword=${keyword}&jobarea=${city}&company=${company}`,
-    // 猎聘搜索页
-    '猎聘': `https://www.liepin.com/zhaopin/?key=${keyword}&dqs=${city}&company=${company}`
-  };
-
-  return searchUrls[job.sourceSite] || `https://www.zhipin.com/web/geek/jobs?query=${keyword}&city=${cityCode}&company=${company}`;
-};
-
-/** 点击岗位卡片
- * 【优化方案】区分岗位状态跳转策略，优先使用详情页避免触发反爬：
- * - ACTIVE/NEW（在职）：有真实URL → 直接跳转详情页；无URL但有ID → 构建详情页URL；都没有 → 搜索页
- * - OFFLINE（下架）：跳转到精准城市+关键词搜索页，查找类似岗位
- */
+/** 点击岗位卡片：优先打开真实详情页，无详情页时打开搜索列表页作为兜底 */
 const handleJobClick = (job: any) => {
-  const status = job.jobStatus || '';
-  const isActive = status === 'ACTIVE' || status === 'NEW';
-  const isOffline = status === 'OFFLINE';
-  const hasValidUrl = job.url && job.url !== '' && !job.url.includes('baidu.com');
-  const hasJobId = job.id && job.id.toString().length > 0;
-
-  console.log('[JobCard clicked]', job.id, job.title, 'status:', status, 'hasUrl:', hasValidUrl, 'hasId:', hasJobId);
-
-  const cityCodeMap: Record<string, string> = {
-    '北京': '101010100', '上海': '101020100', '广州': '101280100', '深圳': '101280600',
-    '杭州': '101210100', '南京': '101190100', '成都': '101270100', '武汉': '101200100',
-    '西安': '101110100', '苏州': '101190400', '重庆': '101040100', '天津': '101030100',
-    '长沙': '101250100', '郑州': '101180100', '东莞': '101280500', '合肥': '101220100',
-    '青岛': '101120200', '沈阳': '101070100', '大连': '101070200', '厦门': '101230200',
-    '无锡': '101190500', '佛山': '101280800', '宁波': '101210400', '昆明': '101290100',
-    '济南': '101120100', '哈尔滨': '101050100', '石家庄': '101090100', '南宁': '101300100',
-    '常州': '101190600', '泉州': '101230400', '长春': '101060100', '温州': '101210300',
-    '烟台': '101120300', '唐山': '101090200', '嘉兴': '101210500', '惠州': '101280300'
-  };
-  const cityCode = cityCodeMap[job.city] || '101010100';
-
-  if (isActive) {
-    // 【ACTIVE/NEW】在职岗位：优先使用真实详情页URL直接跳转
-    if (hasValidUrl) {
-      window.open(job.url, '_blank', 'noopener,noreferrer');
-    } else if (hasJobId && job.sourceSite === 'BOSS直聘') {
-      // 【优化】无URL但有ID时，构建BOSS直聘详情页URL，避免触发搜索页反爬
-      const detailUrl = `https://www.zhipin.com/job_detail/${job.id}.html?city=${cityCode}&source=1001`;
-      window.open(detailUrl, '_blank', 'noopener,noreferrer');
-      ElMessage.info('正在跳转到岗位详情页...');
-    } else {
-      // 兜底：跳转到平台搜索页
-      const searchUrl = buildSearchUrl(job);
-      window.open(searchUrl, '_blank', 'noopener,noreferrer');
-      ElMessage.info('正在跳转到相关岗位搜索页面...');
-    }
-  } else if (isOffline) {
-    // 【OFFLINE】下架岗位：跳转到平台列表页搜索类似岗位
-    const keyword = encodeURIComponent(job.title || '');
-    const company = encodeURIComponent(job.companyName || '');
-    const platformUrls: Record<string, string> = {
-      'BOSS直聘': `https://www.zhipin.com/web/geek/jobs?query=${keyword}&city=${cityCode}&company=${company}`,
-      '智联招聘': `https://sou.zhaopin.com/?jl=${encodeURIComponent(job.city || '')}&kw=${keyword}`,
-      '前程无忧': `https://we.51job.com/pc/search?keyword=${keyword}&jobarea=${encodeURIComponent(job.city || '')}&company=${company}`,
-      '猎聘': `https://www.liepin.com/zhaopin/?dqs=${encodeURIComponent(job.city || '')}&key=${keyword}`
-    };
-    const searchUrl = platformUrls[job.sourceSite] || `https://www.zhipin.com/web/geek/jobs?query=${keyword}&city=${cityCode}&company=${company}`;
-    window.open(searchUrl, '_blank', 'noopener,noreferrer');
-    ElMessage.info('该岗位已下架，正在跳转到相似岗位搜索页...');
+  const url = job.url;
+  
+  if (!url || typeof url !== 'string' || url.trim() === '') {
+    ElMessage.warning('该岗位暂无外部链接');
+    return;
+  }
+  
+  const trimmedUrl = url.trim();
+  
+  if (isPreciseJobSourceUrl(trimmedUrl)) {
+    window.open(trimmedUrl, '_blank', 'noopener,noreferrer');
+  } else if (trimmedUrl.includes('zhipin.com') || trimmedUrl.includes('zhaopin.com') || 
+             trimmedUrl.includes('51job.com') || trimmedUrl.includes('liepin.com')) {
+    window.open(trimmedUrl, '_blank', 'noopener,noreferrer');
   } else {
-    const searchUrl = buildSearchUrl(job);
-    window.open(searchUrl, '_blank', 'noopener,noreferrer');
+    ElMessage.warning('该岗位的外部链接无效');
   }
 };
 </script>

@@ -61,7 +61,7 @@ public class CrawlServiceImpl implements CrawlService {
     // 【优化】前程无忧(51job)和猎聘(liepin)暂不参与爬取（代码保留，接口已禁用）
     private static final Map<String, String> SITE_MAP = new LinkedHashMap<>();
     static {
-        SITE_MAP.put("boss", "BOSS");
+        SITE_MAP.put("boss", "BOSS直聘");
         SITE_MAP.put("zhaopin", "智联招聘");
         // SITE_MAP.put("51job", "前程无忧");   // 【已禁用】备用数据充足，无需额外来源
         // SITE_MAP.put("liepin", "猎聘");      // 【已禁用】备用数据充足，无需额外来源
@@ -153,7 +153,8 @@ public class CrawlServiceImpl implements CrawlService {
     private void runCrawl(Long taskId) {
         CrawlTask task = crawlTaskMapper.selectById(taskId);
         if (task == null) {
-            log.error("任务不存在: taskId={}", taskId);
+            // 常见于：任务已入队后数据库被清洗/删除任务表，线程池仍执行旧 taskId
+            log.warn("爬虫任务已不存在，跳过执行（可能已被删除）: taskId={}", taskId);
             return;
         }
         
@@ -189,13 +190,13 @@ public class CrawlServiceImpl implements CrawlService {
                         if (!crawled.isEmpty()) {
                             crawledAnyForSite = true;
                             log.info("成功爬取 {} 个岗位", crawled.size());
+                        } else if (enableBackupData) {
+                            log.warn("未爬取到数据，启用备用数据: site={}, keyword={}, city={}", site, keyword, city);
+                            crawled = generateBackupJobs(site, keyword, city);
+                            log.info("生成备用数据: {} 个岗位", crawled.size());
                         } else {
-                            log.warn("未爬取到数据，尝试生成备用数据");
-                            // 强制生成备用数据
-                            if (enableBackupData) {
-                                crawled = generateBackupJobs(site, keyword, city);
-                                log.info("生成备用数据: {} 个岗位", crawled.size());
-                            }
+                            log.warn("未爬取到数据（真实抓取为空），已关闭备用数据，跳过: site={}, keyword={}, city={}",
+                                    site, keyword, city);
                         }
                         for (Job job : crawled) {
                             if (siteTotalCount >= SITE_LIMIT) {
@@ -360,11 +361,28 @@ public class CrawlServiceImpl implements CrawlService {
         return cities.isEmpty() ? Collections.singletonList("长沙") : cities;
     }
 
+    /** 解析结果为空时输出 HTML 特征，便于区分「城市参数错误 / 反爬验证 / 前端壳页」 */
+    private void logCrawlEmptyDiagnostics(String site, String requestUrl, Document doc) {
+        if (doc == null) {
+            return;
+        }
+        String html = doc.html();
+        log.warn(
+            "爬取解析为空: site={}, url={}, pageTitle={}, htmlLen={}, hasJobCard={}, captchaOrVerify={}, loginHint={}",
+            site,
+            requestUrl,
+            doc.title(),
+            html.length(),
+            html.contains("job-card") || html.contains("job_card") || html.contains("job-detail"),
+            html.contains("安全验证") || html.contains("人机验证") || html.contains("验证"),
+            html.contains("快速登录") || html.contains("请登录"));
+    }
+
     private List<Job> crawlBySite(String site, String keyword, String city) {
         String url = buildSearchUrl(site, keyword, city);
         List<Job> jobs = new ArrayList<>();
         
-        log.info("爬取: site={}, keyword={}, city={}", site, keyword, city);
+        log.info("爬取: site={}, keyword={}, city={}, url={}", site, keyword, city, url);
         
         // 反爬机制：使用随机的User-Agent
         String[] userAgents = {
@@ -391,25 +409,36 @@ public class CrawlServiceImpl implements CrawlService {
 
                 log.info("第 {} 次尝试爬取 {}", retryCount + 1, site);
 
+                String timestamp = String.valueOf(System.currentTimeMillis());
+                String randomSeed = UUID.randomUUID().toString().substring(0, 16);
+                
                 Document doc = Jsoup.connect(url)
                         .userAgent(userAgent)
                         .timeout(REQUEST_TIMEOUT_MS)
                         .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-                        .header("Accept-Encoding", "gzip, deflate, br")
+                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+                        .header("Accept-Encoding", "gzip, deflate, br, zstd")
+                        .header("Accept-Charset", "UTF-8,ISO-8859-1;q=0.5")
                         .header("Connection", "keep-alive")
                         .header("Upgrade-Insecure-Requests", "1")
                         .header("Cache-Control", "max-age=0")
-                        .header("Referer", referer)
-                        .header("Cookie", cookie)
+                        .header("Referer", "https://www.zhipin.com/web/geek/job")
+                        .header("Cookie", "__zp_stoken__=" + randomSeed + "; Hm_lvt_194df3105ad7148dcf2b98a91b2e88d7=" + (System.currentTimeMillis()/1000 - 3600) + "; __yjs_duid=1_" + randomSeed + "; zhipin_session=" + randomSeed + "; SESSION=" + randomSeed)
                         .header("X-Requested-With", "XMLHttpRequest")
+                        .header("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"")
+                        .header("Sec-Ch-Ua-Mobile", "?0")
+                        .header("Sec-Ch-Ua-Platform", "\"Windows\"")
                         .header("Sec-Fetch-Dest", "document")
                         .header("Sec-Fetch-Mode", "navigate")
-                        .header("Sec-Fetch-Site", "cross-site")
+                        .header("Sec-Fetch-Site", "same-origin")
                         .header("Sec-Fetch-User", "?1")
+                        .header("Dnt", "1")
+                        .header("Sec-Gpc", "1")
+                        .header("If-Modified-Since", new java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z").format(new java.util.Date()))
                         .followRedirects(true)
                         .ignoreContentType(true)
                         .ignoreHttpErrors(true)
+                        .maxBodySize(0)
                         .get();
                 
                 doc.outputSettings().charset("UTF-8");
@@ -432,7 +461,9 @@ public class CrawlServiceImpl implements CrawlService {
                         jobs = parseGeneral(doc, site, city);
                         break;
                 }
-                
+                if (jobs.isEmpty()) {
+                    logCrawlEmptyDiagnostics(site, url, doc);
+                }
                 log.info("{} 爬取完成，解析 {} 个岗位", site, jobs.size());
                 success = true;
                 
@@ -469,8 +500,9 @@ public class CrawlServiceImpl implements CrawlService {
 
         switch (site) {
             case "boss":
-                // BOSS直聘 - 支持城市筛选
-                return "https://www.zhipin.com/web/geek/job?query=" + kw + (normalizedCity.isEmpty() ? "" : "&city=" + getCityCode(normalizedCity));
+                // BOSS Web 端 city 须为 101 开头的高德城市编码，禁止误用 51job 的 getCityCode
+                return "https://www.zhipin.com/web/geek/job?query=" + kw
+                    + (normalizedCity.isEmpty() ? "" : "&city=" + getBossWebCityCode(normalizedCity));
             case "zhaopin":
                 // 智联招聘 - 支持城市和关键词搜索
                 return "https://sou.zhaopin.com/?kw=" + kw + (encodedCity.isEmpty() ? "" : "&jl=" + encodedCity);
@@ -518,9 +550,33 @@ public class CrawlServiceImpl implements CrawlService {
         cityMap.put("合肥", "150200");
         cityMap.put("青岛", "120200");
         cityMap.put("沈阳", "100200");
-        cityMap.put("大连", "100300");
-        cityMap.put("厦门", "030400");
         return cityMap.getOrDefault(standardizeCity(city), "010000");
+    }
+    
+    private String getBossWebCityCode(String city) {
+        Map<String, String> cityMap = new HashMap<>();
+        // BOSS直聘Web端城市代码（101开头的6位高德城市编码）
+        cityMap.put("北京", "101010100");
+        cityMap.put("上海", "101020100");
+        cityMap.put("广州", "101280100");
+        cityMap.put("深圳", "101280600");
+        cityMap.put("杭州", "101210100");
+        cityMap.put("南京", "101190100");
+        cityMap.put("成都", "101270100");
+        cityMap.put("武汉", "101200100");
+        cityMap.put("西安", "101110100");
+        cityMap.put("苏州", "101190400");
+        cityMap.put("重庆", "101040100");
+        cityMap.put("天津", "101030100");
+        cityMap.put("长沙", "101250100");
+        cityMap.put("郑州", "101180100");
+        cityMap.put("东莞", "101280500");
+        cityMap.put("合肥", "101220100");
+        cityMap.put("青岛", "101120200");
+        cityMap.put("沈阳", "101070100");
+        cityMap.put("大连", "101070200");
+        cityMap.put("厦门", "101230200");
+        return cityMap.getOrDefault(standardizeCity(city), "101010100");
     }
 
     /**
@@ -617,7 +673,7 @@ public class CrawlServiceImpl implements CrawlService {
             return null;
         }
         
-        // 提取岗位URL
+        // 提取岗位URL（BOSS 优先 job_detail，避免误取公司主页等首个 <a>）
         String url = extractJobUrl(card, sourceSite);
 
         // 优先使用cityHint作为城市名称，不尝试从网页中解析，避免编码问题
@@ -650,20 +706,68 @@ public class CrawlServiceImpl implements CrawlService {
         return job;
     }
     
+    /**
+     * 从 BOSS 列表卡片中提取职位详情页 URL（/job_detail/xxx.html）
+     */
+    private String extractBossJobDetailUrl(Element card) {
+        if (card == null) {
+            return "";
+        }
+        Elements primaryLinks = card.select("a[href*=job_detail], .job-card-left a[href], .job-title a[href], .job-name a[href]");
+        for (Element a : primaryLinks) {
+            String abs = a.absUrl("href");
+            if (abs != null && !abs.isBlank() && abs.contains("/job_detail/")) {
+                return stripZhipinTrackingParams(abs);
+            }
+        }
+        for (Element a : card.select("a[href]")) {
+            String href = a.attr("href");
+            if (href.contains("job_detail")) {
+                String abs = a.absUrl("href");
+                if (abs != null && abs.contains("/job_detail/")) {
+                    return stripZhipinTrackingParams(abs);
+                }
+            }
+        }
+        String html = card.outerHtml();
+        Matcher absM = Pattern.compile("https?://(?:www\\.)?zhipin\\.com/job_detail/[a-zA-Z0-9._~-]+\\.html").matcher(html);
+        if (absM.find()) {
+            return stripZhipinTrackingParams(absM.group());
+        }
+        Matcher pathM = Pattern.compile("(/job_detail/[a-zA-Z0-9._~-]+\\.html)").matcher(html);
+        if (pathM.find()) {
+            return "https://www.zhipin.com" + pathM.group(1);
+        }
+        return "";
+    }
+
+    private String stripZhipinTrackingParams(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        url = url.trim();
+        int q = url.indexOf('?');
+        if (q > 0 && url.substring(0, q).contains("job_detail")) {
+            return url.substring(0, q);
+        }
+        return url;
+    }
+
     private String extractJobUrl(Element card, String sourceSite) {
-        // 尝试从卡片中提取岗位URL
+        if ("boss".equals(sourceSite)) {
+            String detail = extractBossJobDetailUrl(card);
+            if (!detail.isBlank()) {
+                return detail;
+            }
+            return "";
+        }
+
         String url = "";
-        
-        // 尝试从a标签提取
         Element link = card.selectFirst("a[href]");
         if (link != null) {
             url = link.attr("href");
-            // 处理相对路径
             if (url.startsWith("/")) {
                 switch (sourceSite) {
-                    case "boss":
-                        url = "https://www.zhipin.com" + url;
-                        break;
                     case "zhaopin":
                         url = "https://sou.zhaopin.com" + url;
                         break;
@@ -685,15 +789,17 @@ public class CrawlServiceImpl implements CrawlService {
                     case "linkedin":
                         url = "https://www.linkedin.com" + url;
                         break;
+                    default:
+                        url = "https://www.zhipin.com" + url;
+                        break;
                 }
             }
         }
-        
-        // 如果没有提取到URL，生成默认URL
+
         if (url.isEmpty()) {
             url = getDefaultSiteUrl(sourceSite);
         }
-        
+
         return url;
     }
     
@@ -905,9 +1011,9 @@ public class CrawlServiceImpl implements CrawlService {
         
         // 无效岗位关键词
         String[] invalidKeywords = {
-            "培训", "外包", "中介", "兼职", "刷单", "诈骗", "博彩", 
+            "培训", "外包", "中介", "刷单", "诈骗", "博彩",
             "彩票", "贷款", "保险销售", "房产销售", "电话销售",
-            "培训生", "实习生", "兼职", "临时", "短期", "小时工"
+            "临时", "短期", "小时工"
         };
         
         // 过滤无效公司名
@@ -1070,9 +1176,8 @@ public class CrawlServiceImpl implements CrawlService {
             job.setLastSeenAt(LocalDateTime.now());
             job.setJobKey(buildJobKey(site, job.getTitle(), job.getCompanyName(), job.getCity()));
             
-            // 为备用数据添加更具体的URL，包含岗位和公司信息
-            String url = generateBackupJobUrl(site, job.getTitle(), job.getCompanyName());
-            job.setUrl(url);
+            // 备用数据为演示占位，不提供伪造的「搜索页」链接，避免前端误当作职位详情跳转
+            job.setUrl(null);
             
             jobs.add(job);
         }
@@ -1126,35 +1231,6 @@ public class CrawlServiceImpl implements CrawlService {
     
     private String generateJobDesc(String title) {
         return "负责" + title + "相关工作，参与系统设计和开发，编写高质量代码，持续优化系统性能。";
-    }
-    
-    private String generateBackupJobUrl(String site, String title, String company) {
-        // 【方案C增量】备用数据URL改为：城市 + 关键词精准搜索
-        // 原方案：只传 company 参数，搜索结果不精准
-        // 新方案：只传 city（从参数job获取）+ title 作为关键词，跳转到精准搜索结果页
-        try {
-            String encodedTitle = URLEncoder.encode(title, StandardCharsets.UTF_8);
-            // city 由调用方通过参数传入（generateBackupJobs 中已处理）
-            // 此处不再使用 company 参数，避免搜索引擎将公司名作为主过滤条件
-            switch (site) {
-                case "boss":
-                    // BOSS直聘搜索页：query=岗位关键词，支持城市筛选
-                    return "https://www.zhipin.com/web/geek/job?query=" + encodedTitle;
-                case "zhaopin":
-                    // 智联招聘搜索页：kw=岗位关键词
-                    return "https://sou.zhaopin.com/?jl=&kw=" + encodedTitle;
-                case "51job":
-                    // 前程无忧搜索页：keyword=岗位关键词
-                    return "https://we.51job.com/pc/search?keyword=" + encodedTitle;
-                case "liepin":
-                    // 猎聘搜索页：key=岗位关键词
-                    return "https://www.liepin.com/zhaopin/?key=" + encodedTitle;
-                default:
-                    return "https://www.baidu.com/s?wd=" + encodedTitle + " " + company;
-            }
-        } catch (Exception e) {
-            return getDefaultSiteUrl(site);
-        }
     }
     
     /**
@@ -1235,16 +1311,13 @@ public class CrawlServiceImpl implements CrawlService {
                 continue;
             }
 
-            // 【方案B增量】从卡片<a>标签中提取BOSS直聘详情页真实URL
-            // BOSS详情页URL格式: https://www.zhipin.com/job_detail/xxx.html
-            // 相对路径格式: /job_detail/xxx.html，需要拼装完整URL
-            String rawUrl = "";
-            Element link = card.selectFirst("a[href*=job_detail]");
-            if (link != null) {
-                rawUrl = link.attr("href");
-                if (rawUrl.startsWith("/")) {
-                    rawUrl = "https://www.zhipin.com" + rawUrl;
-                }
+            // 从卡片中提取 BOSS 详情页 URL（与 extractBossJobDetailUrl 逻辑一致）
+            String rawUrl = extractBossJobDetailUrl(card);
+            
+            // 【重要】只有提取到真实详情URL才保存该岗位，确保点击能跳转到真实页面
+            if (rawUrl.isBlank() || !rawUrl.contains("/job_detail/")) {
+                log.debug("跳过无真实详情URL的岗位: {}", title);
+                continue;
             }
 
             job.setTitle(trimLen(title, 100));
@@ -1524,6 +1597,11 @@ public class CrawlServiceImpl implements CrawlService {
         }
         
         return jobs;
+    }
+
+    @Override
+    public List<Job> crawlJobs(String site, String keyword, String city) {
+        return crawlBySite(site, keyword, city);
     }
 
     @PreDestroy

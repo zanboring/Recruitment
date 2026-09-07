@@ -20,6 +20,7 @@ public class Job {
     private String skills;
     private String jobDesc;
     private String url;
+    private String detailHtml; // 详情页原始HTML（兜底用）
     private LocalDateTime publishTime;
     private LocalDateTime lastSeenAt;
     private LocalDateTime createdAt;
@@ -56,6 +57,8 @@ public class Job {
     public void setJobDesc(String jobDesc) { this.jobDesc = jobDesc; }
     public String getUrl() { return url; }
     public void setUrl(String url) { this.url = url; }
+    public String getDetailHtml() { return detailHtml; }
+    public void setDetailHtml(String detailHtml) { this.detailHtml = detailHtml; }
     public LocalDateTime getPublishTime() { return publishTime; }
     public void setPublishTime(LocalDateTime publishTime) { this.publishTime = publishTime; }
     public LocalDateTime getLastSeenAt() { return lastSeenAt; }

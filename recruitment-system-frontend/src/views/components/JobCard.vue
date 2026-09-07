@@ -1,5 +1,5 @@
 <template>
-  <div class="job-card-wrapper" @click="$emit('click', job)">
+  <div class="job-card-wrapper" @click="handleCardClick(job)">
   <el-card class="job-card" :class="cardClass" shadow="hover">
     <!-- 卡片头部：标题 + 状态标签 -->
     <div class="job-card-header">
@@ -48,8 +48,13 @@
         <el-tag :type="sourceType" size="small" effect="plain">{{ job.sourceSite || '未知' }}</el-tag>
         <!-- 【方案A增量】有真实URL时显示"查看原岗"按钮 -->
         <el-button v-if="hasOriginalUrl" type="primary" link size="small"
-          @click.stop="$emit('click', job)" class="view-original-btn">
+          @click.stop="openOriginalUrl" class="view-original-btn">
           <el-icon><Link /></el-icon>查看原岗
+        </el-button>
+        <!-- 【方案A增量】有本地详情时显示"查看本地详情"按钮 -->
+        <el-button v-if="hasDetailHtml" type="success" link size="small"
+          @click.stop="showLocalDetail" class="view-local-btn">
+          <el-icon><Document /></el-icon>本地详情
         </el-button>
         <!-- 【方案A增量】下架岗位显示"查找类似岗位"按钮，引导用户搜索同类岗位 -->
         <el-button v-if="isOffline" type="warning" link size="small"
@@ -60,22 +65,57 @@
       <span class="publish-time">{{ formattedDate }}</span>
     </div>
   </el-card>
-  </div>
+
+  <!-- 【方案A增量】本地详情弹窗 -->
+  <el-dialog
+    v-model="localDetailVisible"
+    title="本地岗位详情（原平台页面快照）"
+    width="80%"
+    :destroy-on-close="true"
+  >
+    <div v-if="localDetailHtml" v-html="sanitizedDetailHtml" class="local-detail-content"></div>
+    <div v-else>加载中...</div>
+  </el-dialog>
+</div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { OfficeBuilding, Location, Reading, Clock, Document, Link, Search } from '@element-plus/icons-vue';
+import { isPreciseJobSourceUrl } from '@/utils/jobSourceUrl';
+import { getJobDetailHtml } from '@/api/job';
 
 interface JobItem {
   id: number; title: string; companyName?: string; sourceSite: string;
   jobStatus: string; city: string; experience: string; education: string;
   minSalary?: number | string; maxSalary?: number | string; salaryUnit: string;
   skills: string; jobDesc?: string; url?: string; publishTime?: string;
+  detailHtml?: string; // 新增：本地存储的详情页HTML
 }
 
 const props = defineProps<{ job: JobItem }>();
-defineEmits<{ click: [job: JobItem] }>();
+const emit = defineEmits<{ click: [job: JobItem] }>();
+
+// ===== 方案A：本地详情弹窗控制 =====
+const localDetailVisible = ref(false);
+const localDetailHtml = ref('');
+
+/** 是否有本地存储的详情HTML */
+const hasDetailHtml = computed(() => {
+  return props.job.detailHtml != null && props.job.detailHtml.trim().length > 0;
+});
+
+/** 净化HTML内容，防止XSS */
+const sanitizeHtml = (html: string) => {
+  if (!html) return '';
+  // 简单净化：移除script标签和on事件属性
+  return html
+    .replace(/<script[^>]*>.*?<\/script>/gis, '')
+    .replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/\s+on\w+\s*=\s*[^"'\s>]+/gi, '');
+};
+
+const sanitizedDetailHtml = computed(() => sanitizeHtml(localDetailHtml.value));
 
 // ===== 计算属性 =====
 
@@ -91,16 +131,14 @@ const statusText = computed(() => {
 
 const sourceType = computed(() => {
   const map: Record<string, string> = {
-    'BOSS直聘': 'danger', '智联招聘': 'primary', '前程无忧': 'success', '猎聘': 'warning'
+    'BOSS直聘': 'danger', 'BOSS': 'danger', '智联招聘': 'primary', '前程无忧': 'success', '猎聘': 'warning'
   };
   return map[props.job.sourceSite] || 'info';
 });
 
 const skillList = computed(() => (props.job.skills || '').split(',').filter(s => s.trim()));
 
-const hasOriginalUrl = computed(() =>
-  !!(props.job.url && props.job.url !== '' && !props.job.url.includes('baidu.com'))
-);
+const hasOriginalUrl = computed(() => isPreciseJobSourceUrl(props.job.url));
 
 /** 【方案A增量】判断岗位是否已下架，用于显示"查找类似岗位"按钮 */
 const isOffline = computed(() => props.job.jobStatus === 'OFFLINE');
@@ -150,6 +188,41 @@ const getSkillTagType = (index: number | string) => {
   const types = ['primary', 'success', 'warning', 'danger'];
   return types[Number(index) % 4];
 };
+
+// ===== 方案A：跳转 + 本地详情逻辑 =====
+
+/** 优先跳转原平台URL */
+const openOriginalUrl = () => {
+  if (props.job.url) {
+    window.open(props.job.url, '_blank');
+  }
+};
+
+/** 卡片点击事件：触发父组件的点击处理 */
+const handleCardClick = (job: JobItem) => {
+  emit('click', job);
+};
+
+/** 显示本地存储的详情页HTML */
+const showLocalDetail = async () => {
+  // 如果本地已有缓存，直接显示
+  if (localDetailHtml.value) {
+    localDetailVisible.value = true;
+    return;
+  }
+  // 否则从后端获取详情HTML
+  try {
+    const res = await getJobDetailHtml(props.job.id);
+    localDetailHtml.value = res.data?.detailHtml || '';
+    localDetailVisible.value = true;
+  } catch (err) {
+    console.error('获取本地详情失败：', err);
+    // 如果后端没有存储，则尝试直接渲染job对象中的detailHtml字段
+    localDetailHtml.value = props.job.detailHtml || '';
+    localDetailVisible.value = true;
+  }
+};
+
 </script>
 
 <style scoped>

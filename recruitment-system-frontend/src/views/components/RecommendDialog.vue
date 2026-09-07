@@ -68,6 +68,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { Search } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import { isPreciseJobSourceUrl } from '@/utils/jobSourceUrl';
 
 interface RecommendItem {
   id: number; title: string; companyName: string; city: string;
@@ -122,28 +124,12 @@ const formatSalary = (min?: number | string, max?: number | string): string => {
   if (maxNum) return `${maxNum}以下`; return '面议';
 };
 
-const buildSearchUrl = (job: RecommendItem) => {
-  const keyword = encodeURIComponent(job.title || '');
-  const city = encodeURIComponent(job.city || '');
-  const company = encodeURIComponent(job.companyName || '');
-  
-  const searchUrls: Record<string, string> = {
-    'BOSS直聘': `https://www.zhipin.com/web/geek/job?query=${keyword}&city=${city}&company=${company}`,
-    '智联招聘': `https://sou.zhaopin.com/?jl=${city}&kw=${keyword}&company=${company}`,
-    '前程无忧': `https://we.51job.com/pc/search?keyword=${keyword}&jobarea=${city}&company=${company}`,
-    '猎聘': `https://www.liepin.com/zhaopin/?key=${keyword}&dqs=${city}&company=${company}`
-  };
-  
-  return searchUrls[job.sourceSite || ''] || `https://www.zhipin.com/web/geek/job?query=${keyword}&city=${city}&company=${company}`;
-};
-
 const handleViewDetail = (job: RecommendItem) => {
-  if (job.url && job.url !== '' && !job.url.includes('baidu.com')) {
-    window.open(job.url, '_blank', 'noopener,noreferrer');
-  } else {
-    const searchUrl = buildSearchUrl(job);
-    window.open(searchUrl, '_blank', 'noopener,noreferrer');
+  if (isPreciseJobSourceUrl(job.url)) {
+    window.open(job.url as string, '_blank', 'noopener,noreferrer');
+    return;
   }
+  ElMessage.warning('该推荐结果未包含招聘网站详情页链接，无法直达原文。');
 };
 </script>
 

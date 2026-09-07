@@ -64,7 +64,7 @@ logging:
   level:
     root: info
     com.example.recruitment: info
-    com.example.recruitment.service.impl.CrawlServiceImpl: warn
+    com.example.recruitment.service.impl.CrawlServiceImpl: info
     org.springframework.web: warn
     org.springframework.security: warn
   file:
@@ -90,7 +90,7 @@ zhipuai:
 
 # Ollama本地大模型配置
 ollama:
-  enabled: ${OLLAMA_ENABLED:false}
+  enabled: ${OLLAMA_ENABLED:true}
   base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
   model: ${OLLAMA_MODEL:qwen2:7b}
 

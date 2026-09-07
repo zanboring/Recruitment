@@ -33,3 +33,19 @@ logs/
 *.tmp
 
 
+########################
+# Personal / AI-tool artifacts (not project code)
+########################
+.workbuddy/
+unpacked_thesis/
+*_thesis.py
+read_thesis.py
+read_thesis2.py
+add_comments.py
+add_comments_full.py
+add_extra_comments.py
+debug_comments.py
+add_detail_html_column.sql
+方案A执行步骤.md
+
+

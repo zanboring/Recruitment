@@ -145,3 +145,13 @@ export function aiAnalysis(data?: JobQuery): Promise<AIAnalysisResult> {
   return http.post('/jobs/ai-analysis', data || {});
 }
 
+/** 方案A：获取岗位本地详情页HTML */
+export interface JobDetailHtmlResult {
+  id: number;
+  detailHtml: string;
+}
+
+export function getJobDetailHtml(jobId: number): Promise<JobDetailHtmlResult> {
+  return http.get(`/jobs/${jobId}/detail-html`);
+}
+

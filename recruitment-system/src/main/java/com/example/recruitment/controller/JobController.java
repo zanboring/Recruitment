@@ -180,5 +180,16 @@ public class JobController {
         log.info("AI智能分析请求");
         return Result.success(jobService.analyzeWithAI(dto));
     }
+
+    @GetMapping("/{id}/detail-html")
+    @Operation(summary = "岗位详情HTML", description = "返回岗位本地存储的详情页HTML（方案A兜底用）")
+    public Result<java.util.Map<String, Object>> getDetailHtml(@PathVariable Long id) {
+        log.info("查询岗位详情HTML: id={}", id);
+        Job job = jobService.getJob(id);
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("id", id);
+        data.put("detailHtml", job == null ? "" : job.getDetailHtml());
+        return Result.success(data);
+    }
 }
 

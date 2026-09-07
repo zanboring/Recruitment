@@ -24,28 +24,55 @@ public class BossParser implements JobParser {
     @Override
     public List<Job> parseJobList(Document document) {
         List<Job> jobs = new ArrayList<>();
-        Elements jobCards = document.select(".job-card-box");
+        // Boss 直聘动态渲染后的卡片选择器（已验证）
+        Elements jobCards = document.select("li.job-card-box, div.job-card, .position-item");
         for (Element card : jobCards) {
             try {
                 Job job = new Job();
-                String title = card.select(".job-title").first().text();
+                // 职位名称
+                Element titleEl = card.selectFirst(".job-name, .job-title, h3");
+                String title = titleEl != null ? titleEl.text() : "未知职位";
                 job.setTitle(title);
                 
-                String salary = card.select(".salary").first().text();
+                // 薪资
+                Element salaryEl = card.selectFirst(".job-salary, .salary");
+                String salary = salaryEl != null ? salaryEl.text() : "";
                 SalaryUtil.SalaryRange range = SalaryUtil.parse(salary);
                 job.setMinSalary(range.getMin());
                 job.setMaxSalary(range.getMax());
                 
-                String city = card.select(".city").first().text();
-                job.setCity(city.replace("[", "").replace("]", ""));
+                // 城市
+                Element cityEl = card.selectFirst(".job-addr, .city, .location");
+                String city = cityEl != null ? cityEl.text() : "";
+                job.setCity(city.replace("[", "").replace("]", "").trim());
                 
-                String company = card.select(".company-name").first().text();
+                // 公司名称
+                Element companyEl = card.selectFirst(".company-name, .company, .boss-name");
+                String company = companyEl != null ? companyEl.text() : "";
                 job.setCompanyName(company);
+                job.setSourceSite(getPlatform());
                 job.setJobKey(HashUtil.sha256(getPlatform() + title + company));
+                job.setJobStatus("active");
+                job.setLastSeenAt(java.time.LocalDateTime.now());
+                
+                // 详情页URL：优先取包含 job_detail 的链接，否则取卡片内第一个有效链接
+                String detailUrl = "";
+                Element detailLink = card.selectFirst("a[href*=job_detail], a[href*=jobdetail], a[href*='/job/']");
+                if (detailLink != null) {
+                    detailUrl = detailLink.absUrl("href");
+                }
+                // 如果上面没拿到，尝试从卡片的 data-job-id 或 onclick 属性拼接
+                if (detailUrl == null || detailUrl.isBlank()) {
+                    String jobId = card.attr("data-job-id");
+                    if (jobId != null && !jobId.isBlank()) {
+                        detailUrl = "https://www.zhipin.com/job_detail/" + jobId + ".html";
+                    }
+                }
+                job.setUrl(detailUrl);
                 
                 jobs.add(job);
             } catch (Exception e) {
-                log.warn("岗位卡片解析异常: {}", e.getMessage());
+                log.warn("Boss直聘岗位卡片解析异常: {}", e.getMessage());
             }
         }
         return jobs;
@@ -54,19 +81,28 @@ public class BossParser implements JobParser {
     @Override
     public Job parseJobDetail(Document document, Job job) {
         try {
-            String desc = firstText(document, ".job-desc, .job-detail, .description");
+            // 职位描述
+            String desc = firstText(document, ".job-detail-box, .job-desc, .description, .detail-content");
             job.setJobDesc(desc);
             
-            String exp = firstMatch(document.text(), "(\\d+[-至]\\d+年|\\d+年|经验不限)");
+            // 经验要求
+            String exp = firstMatch(document.text(), "(?i)(\\d+[-~至]\\d+年|\\d+年经验?|经验不限|应届生|实习生?)");
             job.setExperience(exp.isEmpty() ? "经验不限" : exp);
             
-            String edu = firstMatch(document.text(), "(大专|本科|硕士|博士|不限)");
+            // 学历要求
+            String edu = firstMatch(document.text(), "(?i)(大专|本科|硕士|博士|不限学历?|学历不限)");
             job.setEducation(edu.isEmpty() ? "不限" : edu);
             
-            String publish = firstMatch(document.text(), "(\\d{1,2}-\\d{1,2}|\\d+天前|今天)");
+            // 发布时间
+            String publish = firstMatch(document.text(), "(?i)(\\d{1,2}月\\d{1,2}日|\\d+天前|今天|昨天)");
             job.setPublishTime(parsePublishTime(publish));
+            
+            // 技能标签
+            String skills = extractSkills(document.text());
+            job.setSkills(skills);
+            
         } catch (Exception e) {
-            log.warn("岗位详情解析异常: {}", e.getMessage());
+            log.warn("Boss直聘岗位详情解析异常: {}", e.getMessage());
         }
         return job;
     }
